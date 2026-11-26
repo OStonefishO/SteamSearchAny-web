@@ -99,6 +99,8 @@
       }
       const N = Math.max(1, games.length);
       for (const [tid, freq] of df) S.idf.set(tid, Math.log(1 + N / Math.max(1, freq)));
+      S.df = df; // 供「万金油标签」判定使用
+      S.gameCount = N;
 
       const postings = new Map();
       const norms = new Float64Array(games.length);
@@ -166,12 +168,20 @@
   const tagZh = (id) => S.tagDict[String(id)] || `标签${id}`;
 
   function unitVector(g, userWeight = 1) {
-    const map = new Map();
-    for (const [tid, w] of g.tags) {
-      const idf = S.idf.get(tid);
-      if (!idf) continue;
-      map.set(tid, idf * (0.25 + 0.75 * Math.min(1, Math.max(0, (w || 500) / 1000))));
-    }
+    const total = S.gameCount || S.games.length || 1;
+    const build = (skipCommon) => {
+      const map = new Map();
+      for (const [tid, w] of g.tags) {
+        const idf = S.idf.get(tid);
+        if (!idf) continue;
+        // 出现率 > 22% 的标签（单人/独立/动作…）只是"万金油"，会把个性标签淹掉
+        if (skipCommon && (S.df?.get(tid) || 0) / total > 0.22) continue;
+        map.set(tid, idf * (0.25 + 0.75 * Math.min(1, Math.max(0, (w || 500) / 1000))));
+      }
+      return map;
+    };
+    let map = build(true);
+    if (!map.size) map = build(false); // 极端情况（种子全是通用标签）回退
     let norm = 0;
     for (const v of map.values()) norm += v * v;
     norm = Math.sqrt(norm) || 1;
@@ -310,25 +320,40 @@
       });
     }
 
-    // 按用户设定的画风权重并入：0 = 只看玩法，1 = 只看画风
-    if (seedVec && scored.length > 8) {
-      const w = Math.max(0, Math.min(1, visualWeight));
-      if (w > 0.001) {
-        const order = scored
-          .map((x, k) => [x.vsim, k])
-          .sort((a, b) => a[0] - b[0]);
-        const rank = new Float64Array(scored.length);
-        order.forEach(([, k], idx) => {
-          rank[k] = idx / (scored.length - 1 || 1);
-        });
-        scored.forEach((x, k) => {
-          x.visual = rank[k];
-          x.score = x.score * (1 - w) + rank[k] * w;
-        });
-      }
+    // 好评率轻加权：同等相似度下口碑好的优先（不是硬过滤，低分作品仍会出现）
+    for (const x of scored) {
+      const pct = S.games[x.i].rev?.pct ?? 0;
+      if (pct > 0) x.score *= 0.88 + 0.12 * (pct / 100);
     }
 
     scored.sort((a, b) => b.score - a.score || (S.games[b.i].rev?.total || 0) - (S.games[a.i].rev?.total || 0));
+
+    // MMR 去重：避免前十款全是同一个模板换皮，保证列表里有不同风味
+    const picked = [];
+    let skipped = 0;
+    for (const r of scored) {
+      if (picked.length >= limit) break;
+      if (picked.length && skipped < 40) {
+        const rt = new Set(S.games[r.i].tags.slice(0, 3).map((t) => t[0]));
+        let dup = false;
+        for (const p of picked) {
+          const pt = new Set(S.games[p.i].tags.slice(0, 3).map((t) => t[0]));
+          let inter = 0;
+          for (const t of rt) if (pt.has(t)) inter += 1;
+          if (inter >= 2) { dup = true; break; }
+        }
+        if (dup) { skipped += 1; continue; }
+      }
+      picked.push(r);
+    }
+    if (picked.length < limit) {
+      const used = new Set(picked.map((p) => p.i));
+      for (const r of scored) {
+        if (used.has(r.i)) continue;
+        picked.push(r);
+        if (picked.length >= limit) break;
+      }
+    }
 
     return {
       ok: true,
@@ -339,7 +364,7 @@
         weight: s.weight,
         tags: s.g.tags.slice(0, 8).map((t) => tagZh(t[0])),
       })),
-      results: scored.slice(0, limit).map((r) => ({
+      results: picked.map((r) => ({
         ...S.games[r.i],
         url: `https://store.steampowered.com/app/${S.games[r.i].id}/`,
         score: r.score,
@@ -557,7 +582,7 @@
         demoMode: q.get('demo') || 'exclude',
         visualWeight: q.get('vw') != null ? Number(q.get('vw')) / 100 : 0.2,
       });
-      return jsonResponse({ ...out, unresolved, visualPending: !S.vision && Number(q.get('vw') ?? 20) > 0 });
+      return jsonResponse({ ...out, unresolved });
     }
     if (tail === 'game') {
       const id = Number(path[1]);

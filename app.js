@@ -471,7 +471,6 @@ async function runSimilar() {
     if (minRev) q.set('minReviews', String(minRev));
     const simPct = Number($('#simPct').value) || 0;
     if (simPct) q.set('minPct', String(simPct));
-    q.set('vw', String(state.visualW ?? 20));
     if ($('#onlyHidden')?.checked) q.set('maxReviews', '5000');
 
     const data = await api(`/api/similar?${q}`);
@@ -1050,25 +1049,6 @@ function boot() {
   $('#simPct')?.addEventListener('input', (e) => {
     $('#simPctOut').textContent = `${e.target.value}%`;
     scheduleSimilar();
-  });
-
-  // 相似依据：画风权重（0=只看玩法，100=只看画风）
-  const setVw = (v) => {
-    state.visualW = v;
-    $('#visualW').value = String(v);
-    $('#vwOut').textContent = `${v}%`;
-    $$('#visPreset .seg-btn').forEach((b) => b.classList.toggle('active', Number(b.dataset.vw) === v));
-    scheduleSimilar();
-  };
-  $('#visualW')?.addEventListener('input', (e) => {
-    state.visualW = Number(e.target.value);
-    $('#vwOut').textContent = `${state.visualW}%`;
-    $$('#visPreset .seg-btn').forEach((b) => b.classList.remove('active'));
-    scheduleSimilar();
-  });
-  $('#visPreset')?.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-vw]');
-    if (b) setVw(Number(b.dataset.vw));
   });
 
   // 随机页：Demo 处理 + 好评率下限
