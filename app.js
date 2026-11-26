@@ -56,8 +56,12 @@ function imgTag(src, alt, fallbackId) {
 async function loadStatus() {
   try {
     const data = await api('/api/status');
-    $('#corpusText').textContent = `${data.index.games.toLocaleString()} 款 · ${data.index.tags} 标签`;
-    $('#corpusPill').title = `本地语料：${data.index.games} 款游戏，${data.index.tags} 个 Valve 官方标签`;
+    const built = data.index.loadedAt || data.build?.startedAt || '';
+    const d = built ? new Date(built) : null;
+    const dateStr = d && !Number.isNaN(d.getTime()) ? `${d.getMonth() + 1}-${String(d.getDate()).padStart(2, '0')}` : '';
+    $('#corpusText').textContent =
+      `${data.index.games.toLocaleString()} 款 · ${data.index.tags} 标签` + (dateStr ? ` · 更新 ${dateStr}` : '');
+    $('#corpusPill').title = `语料 ${data.index.games} 款游戏 / ${data.index.tags} 个 Valve 官方标签${built ? ` · 构建于 ${built}` : ''}`;
   } catch {
     $('#corpusText').textContent = '语料未就绪';
   }
@@ -549,6 +553,108 @@ async function applyDeepLink() {
   }
 }
 
+// ---------------- 悬停浮层 ----------------
+const tipState = { timer: null, id: null };
+
+function findGame(id) {
+  return (
+    (state.randomItems || []).find((g) => g.id === id) ||
+    state.allResults.find((g) => g.id === id) ||
+    state.recent.find((g) => g.id === id) ||
+    null
+  );
+}
+
+function tipHtml(g) {
+  const rev = g.rev ?? { total: 0, pct: 0, label: null };
+  const tags = (g.tags ?? []).slice(0, 6);
+  const isSimilar = typeof g.score === 'number';
+  const reason = g.shared?.length
+    ? `因为你们都喜欢 <b>${esc(g.shared.slice(0, 3).join('、'))}</b>`
+    : rev.total && rev.total < 500
+      ? `只有 <b>${rev.total}</b> 条评测，却拿到 <b>${rev.pct}%</b> 好评`
+      : rev.total
+        ? `<b>${rev.pct}%</b> 好评 · ${rev.total.toLocaleString()} 条评测`
+        : '还没有用户评测';
+
+  return `
+    <div class="tip-media">${imgTag(g.header || CDN(g.id, 'header'), g.name, g.id)}</div>
+    <div class="tip-body">
+      <div class="tip-title">${esc(g.name)}</div>
+      <div class="tip-meta">
+        ${g.year ? `<span class="chip">${g.year}</span>` : ''}
+        ${g.price ? `<span class="chip">${esc(g.price)}</span>` : ''}
+        ${rev.total ? `<span class="chip ${pctClass(rev.pct)}">${rev.pct}% 好评</span>` : '<span class="chip">无评测</span>'}
+        ${rev.label ? `<span class="chip">${esc(rev.label)}</span>` : ''}
+      </div>
+      <div class="tip-line">${reason}</div>
+      <div class="tip-tags">${tags.map((t) => `<span>${esc(t.zh)}</span>`).join('')}</div>
+      <div class="tip-foot">
+        <span class="tip-score">${
+          isSimilar
+            ? `<b>${Math.min(99, Math.round(Math.pow(Math.max(0, g.score), 0.7) * 100))}</b> 相似度`
+            : `<b>${g.gem ?? 0}</b> 冷门指数`
+        }</span>
+        <span class="tip-hint">点击看详情</span>
+      </div>
+    </div>`;
+}
+
+function showTip(card, g) {
+  const el = $('#tip');
+  el.innerHTML = tipHtml(g);
+  el.hidden = false;
+
+  const r = card.getBoundingClientRect();
+  const w = 296;
+  const h = el.offsetHeight || 260;
+  const gap = 10;
+  let left = r.right + gap;
+  if (left + w > window.innerWidth - 8) left = r.left - w - gap;
+  if (left < 8) left = Math.min(Math.max(8, r.left), window.innerWidth - w - 8);
+  let top = r.top - 6;
+  if (top + h > window.innerHeight - 8) top = Math.max(8, window.innerHeight - h - 8);
+  el.style.left = `${Math.round(left)}px`;
+  el.style.top = `${Math.round(top)}px`;
+}
+
+function hideTip() {
+  clearTimeout(tipState.timer);
+  tipState.timer = null;
+  tipState.id = null;
+  const el = $('#tip');
+  if (el && !el.hidden) el.hidden = true;
+}
+
+function bindTip() {
+  document.addEventListener('pointerover', (ev) => {
+    const card = ev.target.closest?.('.card');
+    if (!card) return;
+    const id = Number(card.dataset.id);
+    if (tipState.id === id) return;
+    // 触屏设备不弹
+    if (window.matchMedia('(hover: none)').matches) return;
+    hideTip();
+    tipState.id = id;
+    tipState.timer = setTimeout(() => {
+      const g = findGame(id);
+      if (g && card.isConnected) showTip(card, g);
+    }, 260);
+  });
+
+  document.addEventListener('pointerout', (ev) => {
+    const card = ev.target.closest?.('.card');
+    if (!card) return;
+    // 移出到卡片外才隐藏
+    const to = ev.relatedTarget;
+    if (to && card.contains(to)) return;
+    if (tipState.id === Number(card.dataset.id)) hideTip();
+  });
+
+  window.addEventListener('scroll', hideTip, { passive: true });
+  window.addEventListener('resize', hideTip);
+}
+
 // ---------------- 启动 ----------------
 function boot() {
   loadStatus();
@@ -570,6 +676,7 @@ function boot() {
   } catch {}
 
   $$('.tab').forEach((t) => t.addEventListener('click', () => switchView(t.dataset.view)));
+  bindTip();
 
   $$('.seg-btn').forEach((b) =>
     b.addEventListener('click', () => {

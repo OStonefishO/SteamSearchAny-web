@@ -32,7 +32,18 @@
     if (S.ready) return S;
     if (S.loading) return S.loading;
     S.loading = (async () => {
-      const res = await fetch(dataUrl('games.json'));
+      // 先取版本指纹（强制校验），再按版本拉语料，保证"新游戏出来就能搜到"
+      let version = null;
+      try {
+        const vres = await fetch(new URL('data/version.json', document.baseURI).href, { cache: 'no-store' });
+        if (vres.ok) version = await vres.json();
+      } catch {
+        /* 老构建没有 version.json，退回无指纹 */
+      }
+      S.version = version;
+
+      const url = dataUrl('games.json') + (version?.v ? `?v=${encodeURIComponent(version.v)}` : '');
+      const res = await fetch(url, { cache: version?.v ? 'default' : 'no-cache' });
       if (!res.ok) throw new Error(`语料加载失败 HTTP ${res.status}`);
       const raw = await res.json();
       S.built = raw.built;

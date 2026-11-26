@@ -1,0 +1,45 @@
+name: update-games
+
+# 每天 03:10 UTC（北京时间 11:10）抓一次新上架游戏，补进语料后自动重建 Pages
+on:
+  schedule:
+    - cron: '10 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-games
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 增量同步新游戏
+        run: node tools/sync.mjs --limit=1200 --tags=26
+
+      - name: 提交并推送
+        run: |
+          git config user.name "lighthouse-bot"
+          git config user.email "lighthouse-bot@users.noreply.github.com"
+          git add data/games.json data/version.json
+          if git diff --cached --quiet; then
+            echo "没有变化，跳过提交"
+            exit 0
+          fi
+          git commit -m "data: 自动增量更新 $(date -u +%F) [skip ci]"
+          git push
+
+      - name: 摘要
+        run: |
+          echo "### 语料更新完成" >> $GITHUB_STEP_SUMMARY
+          node -e "const v=require('./data/version.json');console.log('当前语料：'+v.count+' 款 · '+v.tags+' 标签 · '+v.built)" >> $GITHUB_STEP_SUMMARY
