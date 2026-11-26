@@ -45,6 +45,30 @@
     <button class="tab" data-view="similar" role="tab">相似追踪</button>
   </nav>
 
+  <button class="icon-btn" id="uiBtn" title="显示设置" aria-haspopup="true" aria-expanded="false">⚙</button>
+  <div class="ui-panel" id="uiPanel" hidden>
+    <div class="ui-row">
+      <span class="ui-label">盲盒页每屏款数</span>
+      <output id="perScreenOut">32</output>
+      <input type="range" id="perScreen" min="8" max="48" step="4" value="32">
+    </div>
+    <div class="ui-row">
+      <span class="ui-label">相似结果每页款数</span>
+      <output id="perPageOut">45</output>
+      <input type="range" id="perPage" min="18" max="90" step="9" value="45">
+    </div>
+    <div class="ui-row">
+      <span class="ui-label">卡片尺寸</span>
+      <span class="seg seg-sm" id="cardSizeSel">
+        <button class="seg-btn" data-min="104">特小</button>
+        <button class="seg-btn active" data-min="126">标准</button>
+        <button class="seg-btn" data-min="152">大</button>
+        <button class="seg-btn" data-min="184">特大</button>
+      </span>
+    </div>
+    <div class="ui-foot">设置会自动保存在本机浏览器</div>
+  </div>
+
   <div class="status-chip" id="corpusPill" title="本地语料库规模">
     <span class="dot"></span><span id="corpusText">载入中…</span>
   </div>

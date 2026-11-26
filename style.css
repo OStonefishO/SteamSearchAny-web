@@ -323,9 +323,29 @@ select:focus, input[type='text']:focus { border-color: var(--accent-dim); box-sh
 /* ---------- 卡片网格（密） ---------- */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(126px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-min, 126px), 1fr));
   gap: 12px;
 }
+
+/* 显示设置 */
+.icon-btn {
+  width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center;
+  background: #0f1a24; border: 1px solid #23384a; color: var(--text-3); font-size: 15px;
+  transition: all 0.16s ease;
+}
+.icon-btn:hover { color: var(--text); border-color: #35566f; background: #16232f; }
+.icon-btn[aria-expanded='true'] { color: #05161f; background: #45bdf7; border-color: #7fd4fb; }
+.ui-panel {
+  position: absolute; top: 58px; right: clamp(16px, 3vw, 40px); z-index: 70; width: 320px;
+  background: #0c141d; border: 1px solid #2a4358; border-radius: 12px; padding: 14px;
+  box-shadow: 0 26px 60px -26px rgba(0, 0, 0, 0.95); display: grid; gap: 14px;
+}
+.ui-row { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; }
+.ui-row input[type='range'] { grid-column: 1 / -1; width: 100%; height: 3px; accent-color: var(--accent); }
+.ui-row .seg { grid-column: 1 / -1; }
+.ui-label { font-size: 12.5px; color: var(--text-2); }
+.ui-row output { font-size: 12.5px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.ui-foot { font-size: 11px; color: var(--text-4); border-top: 1px solid var(--line); padding-top: 10px; }
 
 .card {
   position: relative; border-radius: var(--radius); overflow: hidden;

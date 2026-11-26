@@ -2,7 +2,39 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
-const PER_PAGE = 45; // 相似结果一页显示多少
+const PER_PAGE = 45; // 相似结果一页显示多少（可被显示设置覆盖）
+
+const UI_KEY = 'lighthouse.ui';
+const ui = (() => {
+  try {
+    return Object.assign({ perScreen: 32, perPage: 45, cardMin: 126 }, JSON.parse(localStorage.getItem(UI_KEY) || '{}'));
+  } catch {
+    return { perScreen: 32, perPage: 45, cardMin: 126 };
+  }
+})();
+function saveUi() {
+  try {
+    localStorage.setItem(UI_KEY, JSON.stringify(ui));
+  } catch {}
+}
+function applyUi() {
+  document.documentElement.style.setProperty('--card-min', `${ui.cardMin}px`);
+  const ps = $('#perScreen');
+  const pp = $('#perPage');
+  if (ps) {
+    ps.value = String(ui.perScreen);
+    $('#perScreenOut').textContent = String(ui.perScreen);
+  }
+  if (pp) {
+    pp.value = String(ui.perPage);
+    $('#perPageOut').textContent = String(ui.perPage);
+  }
+  $$('#cardSizeSel .seg-btn').forEach((b) => b.classList.toggle('active', Number(b.dataset.min) === ui.cardMin));
+  const grid = $('#randomGrid');
+  if (grid) {
+    grid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${ui.cardMin}px, 1fr))`;
+  }
+}
 
 const state = {
   view: 'random',
@@ -321,7 +353,7 @@ async function roll() {
   const card = $('#heroCard');
   card.style.opacity = '0.45';
   try {
-    const data = await draw(33);
+    const data = await draw(ui.perScreen + 1);
     if (!data.items?.length) {
       toast('这个筛选下没货了，换个标签试试');
       return;
@@ -330,9 +362,9 @@ async function roll() {
     state.heroId = hero.id;
     renderHero(hero);
     pushRecent(hero);
-    state.randomItems = rest.slice(0, 32);
+    state.randomItems = rest.slice(0, ui.perScreen);
     renderGrid($('#randomGrid'), state.randomItems);
-    $('#gridCount').textContent = String(Math.min(32, rest.length));
+    $('#gridCount').textContent = String(Math.min(ui.perScreen, rest.length));
     $('#poolInfo').textContent = `候选池 ${data.poolSize.toLocaleString()} 款${
       data.tags?.length ? ' · ' + data.tags.map((t) => t.zh).join(' + ') : ''
     }`;
@@ -348,7 +380,7 @@ async function rollGrid() {
   const grid = $('#randomGrid');
   grid.style.opacity = '0.4';
   try {
-    const data = await draw(32);
+    const data = await draw(ui.perScreen);
     state.randomItems = data.items ?? [];
     renderGrid(grid, state.randomItems);
     $('#gridCount').textContent = String(state.randomItems.length);
@@ -444,7 +476,7 @@ async function runSimilar() {
 
     const data = await api(`/api/similar?${q}`);
     state.allResults = data.results ?? [];
-    state.shown = Math.min(PER_PAGE, state.allResults.length);
+    state.shown = Math.min(ui.perPage, state.allResults.length);
     renderExplain(data);
     renderResults();
     if (data.visualPending) {
@@ -967,8 +999,49 @@ function boot() {
 
   $('#findBtn').addEventListener('click', runSimilar);
   $('#loadMore').addEventListener('click', () => {
-    state.shown = Math.min(state.shown + PER_PAGE, state.allResults.length);
+    state.shown = Math.min(state.shown + ui.perPage, state.allResults.length);
     renderResults();
+  });
+
+  // ---- 显示设置（每屏款数 / 每页款数 / 卡片尺寸）----
+  applyUi();
+  const uiBtn = $('#uiBtn');
+  uiBtn?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    const panel = $('#uiPanel');
+    const open = panel.hidden;
+    panel.hidden = !open;
+    uiBtn.setAttribute('aria-expanded', String(open));
+  });
+  $('#uiPanel')?.addEventListener('click', (ev) => ev.stopPropagation());
+  document.addEventListener('click', () => {
+    const panel = $('#uiPanel');
+    if (panel && !panel.hidden) {
+      panel.hidden = true;
+      uiBtn?.setAttribute('aria-expanded', 'false');
+    }
+  });
+  $('#perScreen')?.addEventListener('input', (e) => {
+    ui.perScreen = Number(e.target.value);
+    $('#perScreenOut').textContent = String(ui.perScreen);
+    saveUi();
+    roll();
+  });
+  $('#perPage')?.addEventListener('input', (e) => {
+    ui.perPage = Number(e.target.value);
+    $('#perPageOut').textContent = String(ui.perPage);
+    saveUi();
+    if (state.allResults.length) {
+      state.shown = Math.min(ui.perPage, state.allResults.length);
+      renderResults();
+    }
+  });
+  $('#cardSizeSel')?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-min]');
+    if (!b) return;
+    ui.cardMin = Number(b.dataset.min);
+    saveUi();
+    applyUi();
   });
   $('#minRev').addEventListener('input', (e) => {
     $('#minRevOut').textContent = Number(e.target.value).toLocaleString();
