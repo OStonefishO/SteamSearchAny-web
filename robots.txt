@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://ostonefisho.github.io/SteamSearchAny-web/sitemap.xml

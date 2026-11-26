@@ -4,8 +4,39 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Steam 灯塔 · 在近万款游戏里捞出没人看见的那一款</title>
-<meta name="description" content="随机盲盒发现冷门佳作，也可以用多款游戏加权检索相似作品——参考 SteamPeek 的思路，中文界面，更偏冷门。">
-<meta name="theme-color" content="#070a0e">
+<meta name="description" content="Steam 灯塔：1 万+ 款游戏语料，随机盲盒发现冷门佳作，多游戏加权相似检索（类似 SteamPeek），可按标签、好评率、Demo、发售日期筛选，中文界面，打开即用。">
+<meta name="keywords" content="Steam 游戏推荐,冷门游戏,隐藏佳作,类似游戏,相似游戏,SteamPeek,独立游戏,游戏发现,Steam 灯塔">
+<meta name="author" content="OStonefishO">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<link rel="canonical" href="https://ostonefisho.github.io/SteamSearchAny-web/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Steam 灯塔">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:title" content="Steam 灯塔 · 找到没人注意到的那些游戏">
+<meta property="og:description" content="随机盲盒发现冷门佳作 + 多游戏加权相似检索。1 万+ 款游戏、428 个 Steam 官方标签，纯静态、打开即用。">
+<meta property="og:url" content="https://ostonefisho.github.io/SteamSearchAny-web/">
+<meta property="og:image" content="https://ostonefisho.github.io/SteamSearchAny-web/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Steam 灯塔 · 找到没人注意到的那些游戏">
+<meta name="twitter:description" content="随机盲盒发现冷门佳作 + 多游戏加权相似检索，中文界面，打开即用。">
+<meta name="twitter:image" content="https://ostonefisho.github.io/SteamSearchAny-web/og.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Steam 灯塔",
+  "alternateName": "Steam Lighthouse",
+  "url": "https://ostonefisho.github.io/SteamSearchAny-web/",
+  "description": "在近万款 Steam 游戏中随机发现冷门佳作，并用多款游戏加权检索相似作品。支持标签多选、好评率、Demo、发售日期筛选。",
+  "applicationCategory": "GameApplication",
+  "operatingSystem": "Web",
+  "inLanguage": "zh-CN",
+  "isAccessibleForFree": true,
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "CNY" },
+  "author": { "@type": "Person", "name": "OStonefishO", "url": "https://github.com/OStonefishO" },
+  "isBasedOn": "https://store.steampowered.com/"
+}
+</script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗼</text></svg>">
 <link rel="preload" href="fonts/inter-500.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css?v=2026-11-26-11627-5778170-2560">
@@ -13,6 +44,18 @@
   <meta property="og:description" content="随机盲盒发现冷门佳作 + 多游戏加权相似检索（静态版，离线可跑）">
 </head>
 <body>
+<noscript>
+  <div style="max-width:760px;margin:40px auto;padding:0 20px;color:#b3c6d6;font-family:system-ui,sans-serif;line-height:1.8">
+    <h1 style="color:#eaf2fa">Steam 灯塔 · 冷门佳作与相似游戏发现</h1>
+    <p>Steam 灯塔是一个免费的 Steam 游戏发现站，两个玩法：</p>
+    <ul>
+      <li><strong>盲盒发现</strong>：随机推荐「评测不多、但好评率很高」的隐藏佳作，可按标签（支持多选）、好评率、评测数量、Demo、发售日期区间筛选。</li>
+      <li><strong>相似追踪</strong>：用一款或多款游戏作为种子，按 Valve 官方标签权重计算相似度，并为每款种子单独调整影响力。</li>
+    </ul>
+    <p>语料 1 万+ 款游戏、428 个 Steam 官方标签，全部计算在浏览器本地完成，打开即用、无需注册。</p>
+    <p>请启用 JavaScript 后使用。开源地址：<a href="https://github.com/OStonefishO/SteamSearchAny" style="color:#4cc2ff">github.com/OStonefishO/SteamSearchAny</a></p>
+  </div>
+</noscript>
 <div class="bg">
   <div class="bg-glow bg-glow-a"></div>
   <div class="bg-glow bg-glow-b"></div>
