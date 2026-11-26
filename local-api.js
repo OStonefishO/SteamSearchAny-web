@@ -107,6 +107,31 @@
       }
 
       Object.assign(S, { ready: true, games, byId, postings, norms });
+
+      // 封面视觉特征（可选，缺失时视觉权重自动为 0）
+      try {
+        const vres = await fetch(dataUrl('vision.json'), { cache: 'default' });
+        if (vres.ok) {
+          const vj = await vres.json();
+          const vec = new Map();
+          const dim = vj.dim || 108;
+          for (const [id, b64] of Object.entries(vj.data || {})) {
+            const bin = atob(b64);
+            const arr = new Float32Array(bin.length);
+            for (let i = 0; i < bin.length; i += 1) arr[i] = bin.charCodeAt(i) / 255;
+            // L2 归一
+            let n = 0;
+            for (let i = 0; i < arr.length; i += 1) n += arr[i] * arr[i];
+            n = Math.sqrt(n) || 1;
+            for (let i = 0; i < arr.length; i += 1) arr[i] /= n;
+            vec.set(Number(id), { a: arr, d: dim });
+          }
+          S.vision = vec;
+        }
+      } catch {
+        /* 没有视觉数据也能正常跑 */
+      }
+
       return S;
     })();
     return S.loading;
@@ -165,7 +190,7 @@
   }
 
   function findSimilar(seeds, opts) {
-    const { limit = 24, tagIds = [], minReviews = 0, maxReviews = 0 } = opts || {};
+    const { limit = 24, tagIds = [], minReviews = 0, maxReviews = 0, minPct = 0, demoMode = 'exclude' } = opts || {};
     const t0 = performance.now();
     const seedIds = new Set(seeds.map((s) => s.g.id));
     const units = seeds.map((s) => unitVector(s.g, Math.max(0.05, s.weight || 1)));
@@ -176,6 +201,26 @@
     const perSeedCos = units.map((u) => scoreAgainst(u));
     const perSeedPct = perSeedCos.map((c) => percentileOf(c));
     const norm = (c) => Math.max(0, Math.min(1, (c - 0.18) / 0.62));
+
+    // 种子封面平均向量（用于「画风相似」的隐性加权）
+    let seedVec = null;
+    if (S.vision?.size) {
+      const acc = new Float32Array(S.vision.values().next().value.a.length);
+      let n = 0;
+      for (const s of seeds) {
+        const v = S.vision.get(s.g.id);
+        if (!v) continue;
+        for (let i = 0; i < acc.length; i += 1) acc[i] += v.a[i];
+        n += 1;
+      }
+      if (n) {
+        let len = 0;
+        for (let i = 0; i < acc.length; i += 1) len += acc[i] * acc[i];
+        len = Math.sqrt(len) || 1;
+        for (let i = 0; i < acc.length; i += 1) acc[i] /= len;
+        seedVec = acc;
+      }
+    }
 
     const scored = [];
     for (let i = 0; i < S.games.length; i += 1) {
@@ -190,6 +235,8 @@
       const total = g.rev?.total || 0;
       if (minReviews && total < minReviews) continue;
       if (maxReviews && total > maxReviews) continue;
+      if (minPct && (g.rev?.pct ?? 0) < minPct) continue;
+      if (!passDemo(g, demoMode)) continue;
 
       const fusionNorm = norm(fusion);
       let score;
@@ -218,13 +265,38 @@
       }
       shared.sort((a, b) => b.v - a.v);
 
+      // 画风相似度（封面灰度高维余弦）
+      let vsim = 0;
+      if (seedVec) {
+        const v = S.vision.get(g.id);
+        if (v) {
+          for (let k = 0; k < seedVec.length; k += 1) vsim += seedVec[k] * v.a[k];
+        }
+      }
+
       scored.push({
         i,
         score,
         fusion: fusionNorm,
         fit,
+        vsim,
         perSeed: perSeedPct.map((p) => p[i] * 100),
         shared: shared.slice(0, 5).map((s) => s.zh),
+      });
+    }
+
+    // 把「画风相似」按分位并入总分：标签决定方向，封面做微调
+    if (seedVec && scored.length > 8) {
+      const order = scored
+        .map((x, k) => [x.vsim, k])
+        .sort((a, b) => a[0] - b[0]);
+      const rank = new Float64Array(scored.length);
+      order.forEach(([, k], idx) => {
+        rank[k] = idx / (scored.length - 1 || 1);
+      });
+      scored.forEach((x, k) => {
+        x.visual = rank[k];
+        x.score = x.score * 0.8 + rank[k] * 0.2;
       });
     }
 
@@ -286,7 +358,15 @@
     };
   }
 
-  function randomPool({ mode, tagIds, minYear }) {
+  const DEMO_RE = /(^|[\s:：\-–\[(])(demo|试玩|试玩版|序章|prologue|playtest)/i;
+  const isDemo = (g) => DEMO_RE.test(g.name || '') || DEMO_RE.test(g.alt || '');
+  const passDemo = (g, demoMode) => {
+    if (demoMode === 'only') return isDemo(g);
+    if (demoMode === 'all') return true;
+    return !isDemo(g); // 默认排除 demo
+  };
+
+  function randomPool({ mode, tagIds, minYear, minPct = 0, demoMode = 'exclude' }) {
     const out = [];
     for (const g of S.games) {
       if (tagIds?.length) {
@@ -294,6 +374,8 @@
         if (!tagIds.every((id) => set.has(id))) continue;
       }
       if (minYear && (g.year || 0) < minYear) continue;
+      if (!passDemo(g, demoMode)) continue;
+      if (minPct && ((g.rev?.pct ?? 0) < minPct || !g.rev?.total)) continue;
       if (mode === 'gem') {
         if (!isGem(g)) continue;
       } else if (mode === 'hidden') {
@@ -388,7 +470,9 @@
       const count = Math.min(48, Number(q.get('count')) || 1);
       const exclude = (q.get('exclude') || '').split(',').map(Number).filter(Boolean);
       const minYear = Number(q.get('minYear')) || null;
-      const pool = randomPool({ mode, tagIds, minYear });
+      const minPct = Number(q.get('minPct')) || 0;
+      const demoMode = q.get('demo') || 'exclude';
+      const pool = randomPool({ mode, tagIds, minYear, minPct, demoMode });
       if (!pool.length) return jsonResponse({ ok: true, poolSize: 0, items: [] });
       return jsonResponse({
         ok: true,
@@ -427,6 +511,8 @@
           .filter((n) => Number.isFinite(n) && n > 0),
         minReviews: Number(q.get('minReviews')) || 0,
         maxReviews: Number(q.get('maxReviews')) || 0,
+        minPct: Number(q.get('minPct')) || 0,
+        demoMode: q.get('demo') || 'exclude',
       });
       return jsonResponse({ ...out, unresolved });
     }

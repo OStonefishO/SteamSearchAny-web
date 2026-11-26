@@ -16,6 +16,8 @@ const state = {
   heroId: null,
   revealStep: 12,
   randomItems: [],
+  demoMode: 'exclude',
+  minPct: 0,
 };
 
 const CDN = (id, kind) => {
@@ -305,6 +307,8 @@ function renderRecent() {
 async function draw(count, { heroMode = true } = {}) {
   const params = new URLSearchParams({ mode: state.mode, count: String(count) });
   if (state.tagIds.length) params.set('tags', state.tagIds.join(','));
+  if (state.demoMode && state.demoMode !== 'exclude') params.set('demo', state.demoMode);
+  if (state.minPct) params.set('minPct', String(state.minPct));
   const exclude = state.recent.slice(0, 10).map((g) => g.id).join(',');
   if (exclude) params.set('exclude', exclude);
   return api(`/api/random?${params}`);
@@ -433,6 +437,8 @@ async function runSimilar() {
     });
     const minRev = Number($('#minRev').value) || 0;
     if (minRev) q.set('minReviews', String(minRev));
+    const simPct = Number($('#simPct').value) || 0;
+    if (simPct) q.set('minPct', String(simPct));
     if ($('#onlyHidden')?.checked) q.set('maxReviews', '5000');
 
     const data = await api(`/api/similar?${q}`);
@@ -963,6 +969,23 @@ function boot() {
   $('#minRev').addEventListener('input', (e) => {
     $('#minRevOut').textContent = Number(e.target.value).toLocaleString();
     scheduleSimilar();
+  });
+  $('#simPct')?.addEventListener('input', (e) => {
+    $('#simPctOut').textContent = `${e.target.value}%`;
+    scheduleSimilar();
+  });
+
+  // 随机页：Demo 处理 + 好评率下限
+  $('#demoSel')?.addEventListener('change', (e) => {
+    state.demoMode = e.target.value;
+    roll();
+  });
+  let pctTimer = null;
+  $('#minPct')?.addEventListener('input', (e) => {
+    state.minPct = Number(e.target.value);
+    $('#minPctOut').textContent = `${e.target.value}%`;
+    clearTimeout(pctTimer);
+    pctTimer = setTimeout(roll, 350);
   });
   $('#onlyHidden')?.addEventListener('change', scheduleSimilar);
 

@@ -90,6 +90,16 @@
       </div>
 
       <button class="btn btn-primary" id="rollBtn">换一批 <kbd>空格</kbd></button>
+      <select id="demoSel" title="Demo 处理方式">
+        <option value="exclude">不含 Demo</option>
+        <option value="only">只看 Demo</option>
+        <option value="all">全部（含 Demo）</option>
+      </select>
+      <label class="slider-label" title="只要好评率不低于这个值的游戏">
+        <span>好评率 ≥</span>
+        <output id="minPctOut">0%</output>
+        <input type="range" id="minPct" min="0" max="100" step="5" value="0">
+      </label>
       <span class="pool-info" id="poolInfo"></span>
     </div>
 
@@ -147,6 +157,10 @@
         <label class="slider-label">
           最低评测数 <output id="minRevOut">0</output>
           <input type="range" id="minRev" min="0" max="20000" step="500" value="0">
+        </label>
+        <label class="slider-label">
+          最低好评率 <output id="simPctOut">0%</output>
+          <input type="range" id="simPct" min="0" max="100" step="5" value="0">
         </label>
         <label class="chk"><input type="checkbox" id="onlyHidden"> 只看冷门（评测 &lt; 5000）</label>
       </div>
