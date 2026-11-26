@@ -339,6 +339,10 @@ async function draw(count, { heroMode = true } = {}) {
   if (state.tagIds.length) params.set('tags', state.tagIds.join(','));
   if (state.demoMode && state.demoMode !== 'exclude') params.set('demo', state.demoMode);
   if (state.minPct) params.set('minPct', String(state.minPct));
+  const after = $('#relFrom')?.value;
+  const before = $('#relTo')?.value;
+  if (after) params.set('after', String(Math.floor(new Date(`${after}T00:00:00`).getTime() / 1000)));
+  if (before) params.set('before', String(Math.floor(new Date(`${before}T23:59:59`).getTime() / 1000)));
   const exclude = state.recent.slice(0, 10).map((g) => g.id).join(',');
   if (exclude) params.set('exclude', exclude);
   return api(`/api/random?${params}`);
@@ -1078,6 +1082,9 @@ function boot() {
     $('#minPctOut').textContent = `${e.target.value}%`;
     clearTimeout(pctTimer);
     pctTimer = setTimeout(roll, 350);
+  });
+  ['relFrom', 'relTo'].forEach((id) => {
+    $('#' + id)?.addEventListener('change', roll);
   });
   $('#onlyHidden')?.addEventListener('change', scheduleSimilar);
   const maxRevEl = $('#maxRev');

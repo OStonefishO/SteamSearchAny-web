@@ -66,7 +66,7 @@
       const byId = new Map();
 
       for (let i = 0; i < raw.games.length; i += 1) {
-        const [id, name, tags, total, pct, labelIdx, year, price, free, alt, desc, extra] = raw.games[i];
+        const [id, name, tags, total, pct, labelIdx, year, price, free, alt, desc, extra, relTs] = raw.games[i];
         const g = {
           id,
           name,
@@ -78,6 +78,7 @@
           tags, // [[tagId, weight], ...]
           rev: total ? { total, pct, label: labels[labelIdx] || null } : null,
           year: year || null,
+          relTs: relTs || null,
           price: price || null,
           free: Boolean(free),
           header: CDN(id, 'header'),
@@ -433,7 +434,7 @@
     return !isDemo(g); // 默认排除 demo
   };
 
-  function randomPool({ mode, tagIds, minYear, minPct = 0, demoMode = 'exclude' }) {
+  function randomPool({ mode, tagIds, minYear, minPct = 0, demoMode = 'exclude', afterTs = 0, beforeTs = 0 }) {
     const out = [];
     for (const g of S.games) {
       if (tagIds?.length) {
@@ -441,6 +442,8 @@
         if (!tagIds.every((id) => set.has(id))) continue;
       }
       if (minYear && (g.year || 0) < minYear) continue;
+      if (afterTs && (!g.relTs || g.relTs < afterTs)) continue;
+      if (beforeTs && (!g.relTs || g.relTs > beforeTs)) continue;
       if (!passDemo(g, demoMode)) continue;
       if (minPct && ((g.rev?.pct ?? 0) < minPct || !g.rev?.total)) continue;
       if (mode === 'gem') {
@@ -553,7 +556,9 @@
       const minYear = Number(q.get('minYear')) || null;
       const minPct = Number(q.get('minPct')) || 0;
       const demoMode = q.get('demo') || 'exclude';
-      const pool = randomPool({ mode, tagIds, minYear, minPct, demoMode });
+      const afterTs = Number(q.get('after')) || 0;
+      const beforeTs = Number(q.get('before')) || 0;
+      const pool = randomPool({ mode, tagIds, minYear, minPct, demoMode, afterTs, beforeTs });
       if (!pool.length) return jsonResponse({ ok: true, poolSize: 0, items: [] });
       return jsonResponse({
         ok: true,
