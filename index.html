@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Steam 灯塔 · 在近万款游戏里捞出没人看见的那一款</title>
+<meta name="description" content="随机盲盒发现冷门佳作，也可以用多款游戏加权检索相似作品——参考 SteamPeek 的思路，中文界面，更偏冷门。">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗼</text></svg>">
+<link rel="stylesheet" href="style.css">
+  <meta property="og:title" content="Steam 灯塔 · 找到没人注意到的那些游戏">
+  <meta property="og:description" content="随机盲盒发现冷门佳作 + 多游戏加权相似检索（静态版，离线可跑）">
+</head>
+<body>
+<!-- 背景光 -->
+<div class="bg">
+  <div class="bg-glow bg-glow-a"></div>
+  <div class="bg-glow bg-glow-b"></div>
+  <div class="bg-grid"></div>
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="beacon" viewBox="0 0 48 48" aria-hidden="true">
+      <defs>
+        <linearGradient id="beamGrad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#66c0f4" stop-opacity="0.95"/>
+          <stop offset="100%" stop-color="#66c0f4" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="M24 6 L31 16 L17 16 Z" fill="#66c0f4"/>
+      <rect x="20" y="16" width="8" height="20" rx="2" fill="#dfe9f5"/>
+      <rect x="14" y="36" width="20" height="5" rx="2.5" fill="#8fb4d6"/>
+      <path class="beam" d="M31 12 L46 4 L46 20 Z" fill="url(#beamGrad)"/>
+      <circle cx="24" cy="12" r="2.4" fill="#fff8d0"/>
+    </svg>
+    <div class="brand-text">
+      <h1>Steam 灯塔</h1>
+      <p>照亮没人注意到的那些游戏</p>
+    </div>
+  </div>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-view="random" role="tab">🎲 盲盒发现</button>
+    <button class="tab" data-view="similar" role="tab">🧭 相似追踪</button>
+  </nav>
+
+  <div class="corpus-pill" id="corpusPill" title="本地语料库规模">
+    <span class="dot"></span><span id="corpusText">载入中…</span>
+  </div>
+</header>
+
+<main>
+  <!-- ============ 盲盒发现 ============ -->
+  <section class="view" id="view-random">
+    <div class="view-head">
+      <h2>开灯，照一照深海</h2>
+      <p>每次刷新都是随机一款。默认只捞「评测不多、但好评率很高」的隐藏佳作。</p>
+    </div>
+
+    <div class="random-bar">
+      <div class="seg" id="modeSeg">
+        <button class="seg-btn active" data-mode="hidden">隐藏佳作</button>
+        <button class="seg-btn" data-mode="gem">好评小众</button>
+        <button class="seg-btn" data-mode="fresh">这两年</button>
+        <button class="seg-btn" data-mode="any">完全随机</button>
+      </div>
+      <div class="select-wrap">
+        <select id="tagSelect" aria-label="按标签限定">
+          <option value="">全部标签</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" id="rollBtn">
+        <span class="dice">🎲</span> 换一款
+        <kbd>空格</kbd>
+      </button>
+      <span class="pool-info" id="poolInfo"></span>
+    </div>
+
+    <article class="hero-card" id="heroCard">
+      <div class="hero-skeleton">
+        <div class="sk-img"></div>
+        <div class="sk-lines"><i></i><i></i><i></i></div>
+      </div>
+    </article>
+
+    <div class="recent" id="recentWrap" hidden>
+      <div class="recent-head"><span>刚刚捞到</span><button class="link" id="clearRecent">清空</button></div>
+      <div class="recent-list" id="recentList"></div>
+    </div>
+  </section>
+
+  <!-- ============ 相似追踪 ============ -->
+  <section class="view hidden" id="view-similar">
+    <div class="view-head">
+      <h2>顺着线索，摸出一串同类</h2>
+      <p>可以放多款游戏，相似度会向它们的交集收敛；每款还能调权重——把它拉高，结果就更像它。</p>
+    </div>
+
+    <div class="seed-dock">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input id="seedInput" type="text" autocomplete="off" spellcheck="false"
+               placeholder="输入游戏名，比如 No Man's Sky / Stardew Valley / 饥荒…">
+        <button class="btn btn-ghost" id="findBtn">找相似</button>
+        <div class="dropdown" id="dropdown" hidden></div>
+      </div>
+      <div class="seeds" id="seedChips">
+        <p class="seeds-empty">先加一两款游戏。加得越多，结果越靠向它们的共同点。</p>
+      </div>
+      <div class="sim-options">
+        <label class="slider-label">
+          最低评测数 <output id="minRevOut">0</output>
+          <input type="range" id="minRev" min="0" max="20000" step="500" value="0">
+        </label>
+        <label class="chk"><input type="checkbox" id="onlyHidden"> 只看冷门（评测 &lt; 5000）</label>
+      </div>
+    </div>
+
+    <div class="explain" id="explain" hidden></div>
+    <div class="results" id="results"></div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="foot-lines">
+    <span>数据来自 Steam 商店公开接口 · 语料本地缓存，不走第三方站点</span>
+    <span class="sep">·</span>
+    <a href="https://store.steampowered.com/" target="_blank" rel="noreferrer">Steam 商店</a>
+    <span class="sep">·</span>
+    <span>相似度 = Valve 官方标签权重 × IDF 余弦 + 交集收敛</span>
+  </div>
+
+  <a class="credit" href="https://github.com/OStonefishO" target="_blank" rel="noreferrer" title="OStonefishO">
+    <img class="avatar" src="avatar.jpg" alt="OStonefishO" width="34" height="34">
+    <span class="credit-text">make with <span class="heart">♥</span> love</span>
+  </a>
+</footer>
+
+<!-- 详情弹窗 -->
+<div class="modal" id="modal" hidden>
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-body" role="dialog" aria-modal="true">
+    <button class="modal-close" data-close aria-label="关闭">✕</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>window.LIGHTHOUSE_STATIC = true;</script>
+<script src="local-api.js"></script>
+<script src="app.js" type="module"></script>
+</body>
+</html>
