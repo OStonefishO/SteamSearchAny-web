@@ -404,7 +404,7 @@ function renderSeeds() {
       <div class="seed-name" title="${esc(s.name)}">${esc(s.name)}</div>
       <button class="seed-rm" data-rm="${i}" title="移除">✕</button>
       <div class="seed-ctl">
-        <input type="range" min="0.2" max="2" step="0.1" value="${s.weight}" data-weight="${i}">
+        <input type="range" min="0" max="3" step="0.1" value="${s.weight}" data-weight="${i}">
         <span class="seed-w">${Number(s.weight).toFixed(1)}×</span>
       </div>
     </div>`
@@ -428,7 +428,7 @@ function scheduleSimilar() {
 /** 分数邻域内随机打散：每次检索换一批"同样好"的作品，避免永远看到同十款 */
 function randomizeOrder(list) {
   return list
-    .map((g) => ({ g, k: (g.score ?? 0) + (Math.random() - 0.5) * 0.05 }))
+    .map((g) => ({ g, k: (g.score ?? 0) + (Math.random() - 0.5) * 0.22 }))
     .sort((a, b) => b.k - a.k)
     .map((x) => x.g);
 }
@@ -1093,7 +1093,8 @@ function boot() {
     if (!el) return;
     const i = Number(el.dataset.weight);
     state.seeds[i].weight = Number(el.value);
-    el.parentElement.querySelector('.seed-w').textContent = `${Number(el.value).toFixed(1)}×`;
+    el.parentElement.querySelector('.seed-w').textContent =
+      Number(el.value) === 0 ? '忽略' : `${Number(el.value).toFixed(1)}×`;
     scheduleSimilar();
   });
   $('#seedChips').addEventListener('click', (ev) => {
