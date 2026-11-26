@@ -328,6 +328,20 @@
 
     scored.sort((a, b) => b.score - a.score || (S.games[b.i].rev?.total || 0) - (S.games[a.i].rev?.total || 0));
 
+    // 画风微调（能抓就抓，抓不到不影响）：只在分数相差极小的"同分组"里，
+    // 让封面观感更接近的排前面。没有特征的一侧 vsim=0，组内顺序不变。
+    if (seedVec) {
+      for (let i = 0; i < scored.length - 1; i += 1) {
+        let j = i;
+        while (j + 1 < scored.length && Math.abs(scored[j].score - scored[j + 1].score) < 0.015) j += 1;
+        if (j > i) {
+          const group = scored.slice(i, j + 1).sort((a, b) => (b.vsim || 0) - (a.vsim || 0));
+          for (let k = 0; k < group.length; k += 1) scored[i + k] = group[k];
+        }
+        i = j;
+      }
+    }
+
     // MMR 去重：避免前十款全是同一个模板换皮，保证列表里有不同风味
     const picked = [];
     let skipped = 0;
