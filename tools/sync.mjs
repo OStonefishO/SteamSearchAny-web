@@ -23,6 +23,7 @@ const argv = process.argv.slice(2);
 const LIMIT = Number((argv.find((a) => a.startsWith('--limit=')) || '').split('=')[1]) || 1200;
 const DRY = argv.includes('--dry');
 const TAG_PAGES = Number((argv.find((a) => a.startsWith('--tags=')) || '').split('=')[1]) || 26;
+const PAGES_PER_TAG = Number((argv.find((a) => a.startsWith('--pages=')) || '').split('=')[1]) || 1;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -56,7 +57,7 @@ async function getItems(ids, retries = 4) {
         include_reviews: true,
         include_assets: false,
         include_release: true,
-        include_basic_info: false,
+        include_basic_info: true,
         include_platforms: false,
       },
     })
@@ -108,22 +109,28 @@ async function fromCharts() {
   return ids;
 }
 
-// ---------- 数据源 B：标签最新发售页 ----------
-async function fromTags(tagIds) {
+// ---------- 数据源 B：标签最新发售页（可多页） ----------
+async function fromTags(tagIds, pages = 1) {
   const ids = new Set();
+  let failed = 0;
   for (const tag of tagIds) {
-    try {
-      const url = `${STORE}/search/results/?query&start=0&count=100&sort_by=Released_DESC&tags=${tag}&infinite=1&l=schinese&cc=CN`;
-      const text = await jget(url, 2);
-      const html = JSON.parse(text)?.results_html ?? '';
-      const re = /data-ds-appid="(\d+)"/g;
-      let m;
-      while ((m = re.exec(html))) ids.add(Number(m[1]));
-    } catch {
-      /* 单个标签失败就跳过 */
+    for (let page = 0; page < pages; page += 1) {
+      try {
+        const url = `${STORE}/search/results/?query&start=${page * 100}&count=100&sort_by=Released_DESC&tags=${tag}&infinite=1&l=schinese&cc=CN`;
+        const text = await jget(url, 2);
+        const html = JSON.parse(text)?.results_html ?? '';
+        const re = /data-ds-appid="(\d+)"/g;
+        let m;
+        while ((m = re.exec(html))) ids.add(Number(m[1]));
+        if (!html) break;
+      } catch {
+        failed += 1;
+        break;
+      }
+      await sleep(200);
     }
-    await sleep(220);
   }
+  if (failed) console.log(`  [标签] ${failed} 次请求失败，不影响其它来源`);
   return ids;
 }
 
@@ -149,7 +156,7 @@ async function main() {
   console.log(`扫描榜单 + ${topTags.length} 个标签的最新发售页…`);
   const cand = new Set();
   for (const id of await fromCharts()) cand.add(id);
-  for (const id of await fromTags(topTags)) cand.add(id);
+  for (const id of await fromTags(topTags, PAGES_PER_TAG)) cand.add(id);
 
   const fresh = [...cand].filter((id) => !existing.has(id));
   console.log(`候选 ${cand.size} 个，其中未收录 ${fresh.length} 个`);
@@ -194,6 +201,7 @@ async function main() {
         price,
         typeof price === 'string' && /免费|Free/i.test(price) ? 1 : 0,
         null,
+        (String(it.basic_info?.short_description || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() || '').slice(0, 220) || null,
       ]);
       for (const [tid] of tags) if (!tagDict[tid]) newTagIds.add(tid);
     }

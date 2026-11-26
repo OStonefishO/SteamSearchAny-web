@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#070a0e">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗼</text></svg>">
 <link rel="preload" href="fonts/inter-500.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=2026-11-26-10285-4542024">
   <meta property="og:title" content="Steam 灯塔 · 找到没人注意到的那些游戏">
   <meta property="og:description" content="随机盲盒发现冷门佳作 + 多游戏加权相似检索（静态版，离线可跑）">
 </head>
@@ -67,12 +67,33 @@
         <button class="seg-btn" data-mode="fresh">这两年</button>
         <button class="seg-btn" data-mode="any">完全随机</button>
       </div>
-      <select id="tagSelect" aria-label="按标签限定">
-        <option value="">全部标签</option>
-      </select>
+
+      <div class="multisel" id="tagFilter">
+        <button class="multisel-btn" id="tagBtn" aria-haspopup="listbox" aria-expanded="false">
+          <span class="ms-label" id="tagBtnLabel">全部标签</span>
+          <span class="ms-count" id="tagCount" hidden>0</span>
+          <svg class="caret" viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </button>
+        <div class="multisel-panel" id="tagPanel" hidden>
+          <div class="ms-head">
+            <input id="tagSearch" type="text" placeholder="搜索标签（如 恐怖 / 农场）" autocomplete="off">
+          </div>
+          <div class="ms-list" id="tagList" role="listbox" aria-multiselectable="true"></div>
+          <div class="ms-foot">
+            <span class="ms-hint">选中多个 = 必须同时具备（AND）</span>
+            <span class="ms-actions">
+              <button class="btn btn-sm btn-quiet" id="tagClear">清空</button>
+              <button class="btn btn-sm btn-primary" id="tagDone">完成</button>
+            </span>
+          </div>
+        </div>
+      </div>
+
       <button class="btn btn-primary" id="rollBtn">换一批 <kbd>空格</kbd></button>
       <span class="pool-info" id="poolInfo"></span>
     </div>
+
+    <div class="ms-chips" id="tagChips" hidden></div>
 
     <article class="hero" id="heroCard">
       <div class="skeleton-hero">
@@ -165,7 +186,7 @@
 <div class="tip" id="tip" hidden></div>
 
 <script>window.LIGHTHOUSE_STATIC = true;</script>
-<script src="local-api.js"></script>
-<script src="app.js" type="module"></script>
+<script src="local-api.js?v=2026-11-26-10285-4542024"></script>
+<script src="app.js?v=2026-11-26-10285-4542024" type="module"></script>
 </body>
 </html>

@@ -53,11 +53,12 @@
       const byId = new Map();
 
       for (let i = 0; i < raw.games.length; i += 1) {
-        const [id, name, tags, total, pct, labelIdx, year, price, free, alt] = raw.games[i];
+        const [id, name, tags, total, pct, labelIdx, year, price, free, alt, desc] = raw.games[i];
         const g = {
           id,
           name,
           alt: alt || null,
+          desc: desc || null,
           tags, // [[tagId, weight], ...]
           rev: total ? { total, pct, label: labels[labelIdx] || null } : null,
           year: year || null,
@@ -161,7 +162,7 @@
   }
 
   function findSimilar(seeds, opts) {
-    const { limit = 24, tagId = null, minReviews = 0, maxReviews = 0 } = opts || {};
+    const { limit = 24, tagIds = [], minReviews = 0, maxReviews = 0 } = opts || {};
     const t0 = performance.now();
     const seedIds = new Set(seeds.map((s) => s.g.id));
     const units = seeds.map((s) => unitVector(s.g, Math.max(0.05, s.weight || 1)));
@@ -179,7 +180,10 @@
       if (!fusion) continue;
       const g = S.games[i];
       if (seedIds.has(g.id)) continue;
-      if (tagId && !g.tags.some((t) => t[0] === Number(tagId))) continue;
+      if (tagIds.length) {
+        const set = new Set(g.tags.map((t) => t[0]));
+        if (!tagIds.every((id) => set.has(id))) continue;
+      }
       const total = g.rev?.total || 0;
       if (minReviews && total < minReviews) continue;
       if (maxReviews && total > maxReviews) continue;
@@ -279,10 +283,13 @@
     };
   }
 
-  function randomPool({ mode, tagId, minYear }) {
+  function randomPool({ mode, tagIds, minYear }) {
     const out = [];
     for (const g of S.games) {
-      if (tagId && !g.tags.some((t) => t[0] === Number(tagId))) continue;
+      if (tagIds?.length) {
+        const set = new Set(g.tags.map((t) => t[0]));
+        if (!tagIds.every((id) => set.has(id))) continue;
+      }
       if (minYear && (g.year || 0) < minYear) continue;
       if (mode === 'gem') {
         if (!isGem(g)) continue;
@@ -371,17 +378,20 @@
     }
     if (tail === 'random') {
       const mode = q.get('mode') || 'gem';
-      const tagId = q.get('tag') ? Number(q.get('tag')) : null;
+      const tagIds = (q.get('tags') || q.get('tag') || '')
+        .split(',')
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0);
       const count = Math.min(48, Number(q.get('count')) || 1);
       const exclude = (q.get('exclude') || '').split(',').map(Number).filter(Boolean);
       const minYear = Number(q.get('minYear')) || null;
-      const pool = randomPool({ mode, tagId, minYear });
+      const pool = randomPool({ mode, tagIds, minYear });
       if (!pool.length) return jsonResponse({ ok: true, poolSize: 0, items: [] });
       return jsonResponse({
         ok: true,
         poolSize: pool.length,
         mode,
-        tag: tagId ? { id: tagId, zh: tagZh(tagId) } : null,
+        tags: tagIds.map((id) => ({ id, zh: tagZh(id) })),
         items: pickRandom(pool, count, exclude).map(decorate),
       });
     }
@@ -408,7 +418,10 @@
       });
       const out = findSimilar(seeds, {
         limit: Math.min(120, Number(q.get('limit')) || 24),
-        tagId: q.get('tag') ? Number(q.get('tag')) : null,
+        tagIds: (q.get('tags') || q.get('tag') || '')
+          .split(',')
+          .map(Number)
+          .filter((n) => Number.isFinite(n) && n > 0),
         minReviews: Number(q.get('minReviews')) || 0,
         maxReviews: Number(q.get('maxReviews')) || 0,
       });

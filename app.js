@@ -7,13 +7,15 @@ const PER_PAGE = 45; // 相似结果一页显示多少
 const state = {
   view: 'random',
   mode: 'hidden',
-  tagId: '',
+  tagIds: [],
+  tagList: [],
   seeds: [],
   allResults: [],
   shown: 0,
   recent: [],
   heroId: null,
   revealStep: 12,
+  randomItems: [],
 };
 
 const CDN = (id, kind) => {
@@ -67,19 +69,74 @@ async function loadStatus() {
   }
 }
 
+// ---------------- 多选标签 ----------------
 async function loadTags() {
   try {
-    const data = await api('/api/tags?limit=80');
-    const sel = $('#tagSelect');
-    for (const t of data.tags) {
-      const opt = document.createElement('option');
-      opt.value = String(t.id);
-      opt.textContent = `${t.zh} · ${t.count}`;
-      sel.appendChild(opt);
-    }
+    const data = await api('/api/tags?limit=120');
+    state.tagList = data.tags;
+    renderTagList('');
   } catch {
     /* 忽略 */
   }
+}
+
+function renderTagList(filter = '') {
+  const box = $('#tagList');
+  if (!box) return;
+  const q = filter.trim().toLowerCase();
+  const items = (state.tagList || []).filter((t) => !q || t.zh.toLowerCase().includes(q));
+  if (!items.length) {
+    box.innerHTML = '<div class="ms-hint" style="padding:10px 8px">没有匹配的标签</div>';
+    return;
+  }
+  box.innerHTML = items
+    .map(
+      (t) => `<div class="ms-item ${state.tagIds.includes(t.id) ? 'on' : ''}" data-tag="${t.id}" role="option" aria-selected="${state.tagIds.includes(t.id)}">
+        <span class="tick">✓</span><span>${esc(t.zh)}</span><span class="cnt">${t.count}</span>
+      </div>`
+    )
+    .join('');
+}
+
+function renderTagChips() {
+  const wrap = $('#tagChips');
+  if (!wrap) return;
+  if (!state.tagIds.length) {
+    wrap.hidden = true;
+    wrap.innerHTML = '';
+    return;
+  }
+  wrap.hidden = false;
+  wrap.innerHTML = state.tagIds
+    .map((id) => {
+      const t = (state.tagList || []).find((x) => x.id === id);
+      return `<span class="ms-chip">${esc(t?.zh ?? `#${id}`)}<button data-rmtag="${id}" title="移除">✕</button></span>`;
+    })
+    .join('');
+}
+
+function updateTagButton() {
+  const n = state.tagIds.length;
+  $('#tagCount').hidden = n === 0;
+  $('#tagCount').textContent = String(n);
+  $('#tagBtnLabel').textContent = n === 0 ? '全部标签' : n === 1
+    ? (state.tagList || []).find((t) => t.id === state.tagIds[0])?.zh ?? '1 个标签'
+    : `${n} 个标签`;
+}
+
+function toggleTag(id) {
+  const i = state.tagIds.indexOf(id);
+  if (i >= 0) state.tagIds.splice(i, 1);
+  else state.tagIds.push(id);
+  updateTagButton();
+  renderTagChips();
+  renderTagList($('#tagSearch')?.value ?? '');
+}
+
+function closeTagPanel() {
+  const panel = $('#tagPanel');
+  if (panel) panel.hidden = true;
+  $('#tagBtn')?.setAttribute('aria-expanded', 'false');
 }
 
 // ---------------- 卡片 ----------------
@@ -100,8 +157,7 @@ function cardHtml(g, index, { score = false } = {}) {
         .filter(Boolean)
         .join(' · ');
 
-  return `<article class="card" data-id="${g.id}" tabindex="0" style="animation-delay:${Math.min(index * 16, 420)}ms"
-    title="${esc(g.name)}${g.shared?.length ? ` · 因为 ${esc(g.shared.slice(0, 3).join('、'))}` : ''}">
+  return `<article class="card" data-id="${g.id}" tabindex="0" aria-label="${esc(g.name)}" style="animation-delay:${Math.min(index * 16, 420)}ms">
     <div class="card-media">
       ${imgTag(g.cover || CDN(g.id, 'cover'), g.name, g.id)}
       ${score ? '' : ratingPill}
@@ -193,8 +249,7 @@ function renderHero(g) {
   $('#heroCard').onclick = (ev) => {
     const tag = ev.target.closest('[data-tag]');
     if (tag) {
-      state.tagId = tag.dataset.tag;
-      $('#tagSelect').value = state.tagId;
+      toggleTag(Number(tag.dataset.tag));
       roll();
       return;
     }
@@ -241,7 +296,7 @@ function renderRecent() {
 
 async function draw(count, { heroMode = true } = {}) {
   const params = new URLSearchParams({ mode: state.mode, count: String(count) });
-  if (state.tagId) params.set('tag', state.tagId);
+  if (state.tagIds.length) params.set('tags', state.tagIds.join(','));
   const exclude = state.recent.slice(0, 10).map((g) => g.id).join(',');
   if (exclude) params.set('exclude', exclude);
   return api(`/api/random?${params}`);
@@ -266,7 +321,9 @@ async function roll() {
     state.randomItems = rest.slice(0, 32);
     renderGrid($('#randomGrid'), state.randomItems);
     $('#gridCount').textContent = String(Math.min(32, rest.length));
-    $('#poolInfo').textContent = `候选池 ${data.poolSize.toLocaleString()} 款${data.tag ? ' · ' + data.tag.zh : ''}`;
+    $('#poolInfo').textContent = `候选池 ${data.poolSize.toLocaleString()} 款${
+      data.tags?.length ? ' · ' + data.tags.map((t) => t.zh).join(' + ') : ''
+    }`;
   } catch (e) {
     toast('抽卡失败：' + e.message);
   } finally {
@@ -581,12 +638,14 @@ function tipHtml(g) {
     <div class="tip-media">${imgTag(g.header || CDN(g.id, 'header'), g.name, g.id)}</div>
     <div class="tip-body">
       <div class="tip-title">${esc(g.name)}</div>
+      ${g.alt ? `<div class="tip-line" style="color:var(--text-4);margin-top:-4px">${esc(g.alt)}</div>` : ''}
       <div class="tip-meta">
         ${g.year ? `<span class="chip">${g.year}</span>` : ''}
         ${g.price ? `<span class="chip">${esc(g.price)}</span>` : ''}
         ${rev.total ? `<span class="chip ${pctClass(rev.pct)}">${rev.pct}% 好评</span>` : '<span class="chip">无评测</span>'}
         ${rev.label ? `<span class="chip">${esc(rev.label)}</span>` : ''}
       </div>
+      ${g.desc ? `<div class="tip-desc">${esc(g.desc)}</div>` : ''}
       <div class="tip-line">${reason}</div>
       <div class="tip-tags">${tags.map((t) => `<span>${esc(t.zh)}</span>`).join('')}</div>
       <div class="tip-foot">
@@ -687,9 +746,44 @@ function boot() {
     })
   );
 
-  $('#tagSelect').addEventListener('change', (e) => {
-    state.tagId = e.target.value;
+  // ---- 多选标签 ----
+  const tagBtn = $('#tagBtn');
+  tagBtn?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    const panel = $('#tagPanel');
+    const willOpen = panel.hidden;
+    panel.hidden = !willOpen;
+    tagBtn.setAttribute('aria-expanded', String(willOpen));
+    if (willOpen) {
+      renderTagList($('#tagSearch').value);
+      setTimeout(() => $('#tagSearch').focus(), 50);
+    }
+  });
+  $('#tagSearch')?.addEventListener('input', (e) => renderTagList(e.target.value));
+  $('#tagPanel')?.addEventListener('click', (ev) => ev.stopPropagation());
+  $('#tagList')?.addEventListener('click', (ev) => {
+    const item = ev.target.closest('[data-tag]');
+    if (item) toggleTag(Number(item.dataset.tag));
+  });
+  $('#tagChips')?.addEventListener('click', (ev) => {
+    const rm = ev.target.closest('[data-rmtag]');
+    if (!rm) return;
+    toggleTag(Number(rm.dataset.rmtag));
     roll();
+  });
+  $('#tagClear')?.addEventListener('click', () => {
+    state.tagIds = [];
+    updateTagButton();
+    renderTagChips();
+    renderTagList($('#tagSearch').value);
+    roll();
+  });
+  $('#tagDone')?.addEventListener('click', () => {
+    closeTagPanel();
+    roll();
+  });
+  document.addEventListener('click', (ev) => {
+    if (!ev.target.closest('#tagFilter')) closeTagPanel();
   });
   $('#rollBtn').addEventListener('click', roll);
   $('#shuffleGrid').addEventListener('click', rollGrid);

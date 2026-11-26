@@ -25,7 +25,7 @@ jobs:
           node-version: '20'
 
       - name: 增量同步新游戏
-        run: node tools/sync.mjs --limit=1200 --tags=26
+        run: node tools/sync.mjs --limit=4000 --tags=40 --pages=3
 
       - name: 提交并推送
         run: |
