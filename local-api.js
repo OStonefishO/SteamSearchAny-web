@@ -160,8 +160,6 @@
         clearTimeout(timer);
         S.visionLoading = null;
       });
-    })();
-    return S.loading;
   }
 
   // ---------- 算法（与服务端 similar.mjs 对齐）----------
