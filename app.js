@@ -651,7 +651,7 @@ async function openChangelog() {
             </table>`
           : `<p style="color:var(--text-3);font-size:13px;margin-top:14px">暂无记录 —— 下一次自动更新后会出现在这里。</p>`
       }
-    </div>`;
+    </div>`);
 }
 
 function closeModal() {
