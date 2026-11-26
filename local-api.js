@@ -28,6 +28,19 @@
     return new URL(`data/${name}`, document.baseURI).href;
   }
 
+  /** 只读版本清单（很小），用于语料未就绪时先给出总数 */
+  async function peekVersion() {
+    try {
+      const r = await fetch(dataUrl('version.json'), { cache: 'no-store' });
+      if (r.ok) {
+        const v = await r.json();
+        S.version = S.version || v;
+        return v;
+      }
+    } catch {}
+    return null;
+  }
+
   async function load() {
     if (S.ready) return S;
     if (S.loading) return S.loading;
@@ -107,32 +120,46 @@
       }
 
       Object.assign(S, { ready: true, games, byId, postings, norms });
-
-      // 封面视觉特征（可选，缺失时视觉权重自动为 0）
-      try {
-        const vres = await fetch(dataUrl('vision.json'), { cache: 'default' });
-        if (vres.ok) {
-          const vj = await vres.json();
-          const vec = new Map();
-          const dim = vj.dim || 108;
-          for (const [id, b64] of Object.entries(vj.data || {})) {
-            const bin = atob(b64);
-            const arr = new Float32Array(bin.length);
-            for (let i = 0; i < bin.length; i += 1) arr[i] = bin.charCodeAt(i) / 255;
-            // L2 归一
-            let n = 0;
-            for (let i = 0; i < arr.length; i += 1) n += arr[i] * arr[i];
-            n = Math.sqrt(n) || 1;
-            for (let i = 0; i < arr.length; i += 1) arr[i] /= n;
-            vec.set(Number(id), { a: arr, d: dim });
-          }
-          S.vision = vec;
-        }
-      } catch {
-        /* 没有视觉数据也能正常跑 */
-      }
-
+      // 视觉特征放到后台加载，绝不阻塞搜索/推荐
+      kickVision();
       return S;
+    })();
+    return S.loading;
+  }
+
+  /** 封面特征：后台加载 + 超时放弃，到达后广播事件让界面自动刷新 */
+  function kickVision() {
+    if (S.vision || S.visionLoading || S.visionFailed) return;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    S.visionLoading = fetch(dataUrl('vision.json'), { cache: 'default', signal: ctrl.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((vj) => {
+        if (!vj?.data) return;
+        const vec = new Map();
+        const dim = vj.dim || 108;
+        for (const [id, b64] of Object.entries(vj.data)) {
+          const bin = atob(b64);
+          const arr = new Float32Array(bin.length);
+          for (let i = 0; i < bin.length; i += 1) arr[i] = bin.charCodeAt(i) / 255;
+          let n = 0;
+          for (let i = 0; i < arr.length; i += 1) n += arr[i] * arr[i];
+          n = Math.sqrt(n) || 1;
+          for (let i = 0; i < arr.length; i += 1) arr[i] /= n;
+          vec.set(Number(id), { a: arr, d: dim });
+        }
+        S.vision = vec;
+        try {
+          window.dispatchEvent(new CustomEvent('lighthouse:vision', { detail: { count: vec.size } }));
+        } catch {}
+      })
+      .catch(() => {
+        S.visionFailed = true; // 本站还没生成特征库，静默降级
+      })
+      .finally(() => {
+        clearTimeout(timer);
+        S.visionLoading = null;
+      });
     })();
     return S.loading;
   }
@@ -443,13 +470,27 @@
   }
 
   async function handle(u) {
-    await load();
     const parts = u.pathname.split('/').filter(Boolean); // [...prefix, 'api', ...]
     const apiIdx = parts.indexOf('api');
     const path = parts.slice(apiIdx + 1); // ['random'] 等
     const tail = path[0] || '';
     const q = u.searchParams;
 
+    // 状态：语料还没读完也能先报个大概（用 version.json 的计数）
+    if (tail === 'status' && !S.ready) {
+      const v = S.version || (await peekVersion());
+      if (v) {
+        return jsonResponse({
+          ok: true,
+          index: { ready: false, games: v.count, tags: v.tags, loadedAt: v.built },
+          build: { inProcess: true, planned: v.count, fetched: 0, finished: false, startedAt: v.built },
+          static: true,
+          loading: true,
+        });
+      }
+    }
+
+    await load();
     if (tail === 'status') {
       return jsonResponse({
         ok: true,
@@ -518,7 +559,7 @@
         demoMode: q.get('demo') || 'exclude',
         visualWeight: q.get('vw') != null ? Number(q.get('vw')) / 100 : 0.2,
       });
-      return jsonResponse({ ...out, unresolved });
+      return jsonResponse({ ...out, unresolved, visualPending: !S.vision && Number(q.get('vw') ?? 20) > 0 });
     }
     if (tail === 'game') {
       const id = Number(path[1]);

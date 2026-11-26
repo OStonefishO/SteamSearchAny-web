@@ -447,6 +447,9 @@ async function runSimilar() {
     state.shown = Math.min(PER_PAGE, state.allResults.length);
     renderExplain(data);
     renderResults();
+    if (data.visualPending) {
+      toast('画风特征还在解析，本次先按玩法排序，就绪后会自动刷新', 4200);
+    }
     syncUrl();
     try {
       localStorage.setItem('lighthouse.seeds', JSON.stringify(state.seeds));
@@ -1044,6 +1047,14 @@ function boot() {
 
   $$('[data-close]').forEach((el) => el.addEventListener('click', closeModal));
   $('#changelogBtn')?.addEventListener('click', openChangelog);
+
+  // 画风特征后台就绪 -> 自动重算当前结果
+  window.addEventListener('lighthouse:vision', () => {
+    if (state.view === 'similar' && state.seeds.length && (state.visualW ?? 20) > 0) {
+      toast('画风特征已就绪，正在按新权重重排…', 2600);
+      runSimilar();
+    }
+  });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !$('#modal').hidden) closeModal();
   });
