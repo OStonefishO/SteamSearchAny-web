@@ -358,7 +358,7 @@
     };
   }
 
-  const DEMO_RE = /(^|[\s:：\-–\[(])(demo|试玩|试玩版|序章|prologue|playtest)/i;
+  const DEMO_RE = /(^|[\s:：\-–\[(])demo\b|试玩|序章|prologue|playtest/i;
   const isDemo = (g) => DEMO_RE.test(g.name || '') || DEMO_RE.test(g.alt || '');
   const passDemo = (g, demoMode) => {
     if (demoMode === 'only') return isDemo(g);
