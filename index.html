@@ -163,6 +163,18 @@
           <input type="range" id="simPct" min="0" max="100" step="5" value="0">
         </label>
         <label class="chk"><input type="checkbox" id="onlyHidden"> 只看冷门（评测 &lt; 5000）</label>
+        <span class="vis-ctl">
+          <span class="vis-label">相似依据</span>
+          <span class="seg seg-sm" id="visPreset">
+            <button class="seg-btn" data-vw="0">只看玩法</button>
+            <button class="seg-btn active" data-vw="20">混合</button>
+            <button class="seg-btn" data-vw="100">只看画风</button>
+          </span>
+          <label class="slider-label" title="0 = 只用标签（玩法），100 = 只用封面（画风）">
+            画风权重 <output id="vwOut">20%</output>
+            <input type="range" id="visualW" min="0" max="100" step="5" value="20">
+          </label>
+        </span>
       </div>
     </div>
 

@@ -190,7 +190,7 @@
   }
 
   function findSimilar(seeds, opts) {
-    const { limit = 24, tagIds = [], minReviews = 0, maxReviews = 0, minPct = 0, demoMode = 'exclude' } = opts || {};
+    const { limit = 24, tagIds = [], minReviews = 0, maxReviews = 0, minPct = 0, demoMode = 'exclude', visualWeight = 0.2 } = opts || {};
     const t0 = performance.now();
     const seedIds = new Set(seeds.map((s) => s.g.id));
     const units = seeds.map((s) => unitVector(s.g, Math.max(0.05, s.weight || 1)));
@@ -285,19 +285,22 @@
       });
     }
 
-    // 把「画风相似」按分位并入总分：标签决定方向，封面做微调
+    // 按用户设定的画风权重并入：0 = 只看玩法，1 = 只看画风
     if (seedVec && scored.length > 8) {
-      const order = scored
-        .map((x, k) => [x.vsim, k])
-        .sort((a, b) => a[0] - b[0]);
-      const rank = new Float64Array(scored.length);
-      order.forEach(([, k], idx) => {
-        rank[k] = idx / (scored.length - 1 || 1);
-      });
-      scored.forEach((x, k) => {
-        x.visual = rank[k];
-        x.score = x.score * 0.8 + rank[k] * 0.2;
-      });
+      const w = Math.max(0, Math.min(1, visualWeight));
+      if (w > 0.001) {
+        const order = scored
+          .map((x, k) => [x.vsim, k])
+          .sort((a, b) => a[0] - b[0]);
+        const rank = new Float64Array(scored.length);
+        order.forEach(([, k], idx) => {
+          rank[k] = idx / (scored.length - 1 || 1);
+        });
+        scored.forEach((x, k) => {
+          x.visual = rank[k];
+          x.score = x.score * (1 - w) + rank[k] * w;
+        });
+      }
     }
 
     scored.sort((a, b) => b.score - a.score || (S.games[b.i].rev?.total || 0) - (S.games[a.i].rev?.total || 0));
@@ -513,6 +516,7 @@
         maxReviews: Number(q.get('maxReviews')) || 0,
         minPct: Number(q.get('minPct')) || 0,
         demoMode: q.get('demo') || 'exclude',
+        visualWeight: q.get('vw') != null ? Number(q.get('vw')) / 100 : 0.2,
       });
       return jsonResponse({ ...out, unresolved });
     }
