@@ -361,7 +361,7 @@
     if (tail === 'random') {
       const mode = q.get('mode') || 'gem';
       const tagId = q.get('tag') ? Number(q.get('tag')) : null;
-      const count = Math.min(12, Number(q.get('count')) || 1);
+      const count = Math.min(48, Number(q.get('count')) || 1);
       const exclude = (q.get('exclude') || '').split(',').map(Number).filter(Boolean);
       const minYear = Number(q.get('minYear')) || null;
       const pool = randomPool({ mode, tagId, minYear });
@@ -396,7 +396,7 @@
         return { g, weight: Number.isFinite(w) && w > 0 ? w : 1 };
       });
       const out = findSimilar(seeds, {
-        limit: Math.min(60, Number(q.get('limit')) || 24),
+        limit: Math.min(120, Number(q.get('limit')) || 24),
         tagId: q.get('tag') ? Number(q.get('tag')) : null,
         minReviews: Number(q.get('minReviews')) || 0,
         maxReviews: Number(q.get('maxReviews')) || 0,
