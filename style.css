@@ -461,10 +461,13 @@ select:focus, input[type='text']:focus { border-color: var(--accent-dim); box-sh
 .log-table th {
   text-align: left; font-weight: 600; font-size: 11px; letter-spacing: 0.08em;
   color: var(--text-4); text-transform: uppercase; padding: 8px 10px; border-bottom: 1px solid var(--line-2);
+  position: sticky; top: 0; background: #0c141d; z-index: 1;
 }
 .log-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); color: var(--text-2); }
 .log-table tr:hover td { background: #0f1a24; }
 .log-table .plus { color: var(--lime); font-weight: 600; }
+/* 弹窗关闭按钮：滚到哪都够得着 */
+.modal-close { position: fixed; }
 
 /* 空状态 */
 .empty-state { grid-column: 1 / -1; padding: 56px 20px; text-align: center; color: var(--text-3); font-size: 14px; }

@@ -548,8 +548,7 @@ function pickSeed(id, name) {
 async function openDetail(g) {
   const modal = $('#modal');
   const content = $('#modalContent');
-  modal.hidden = false;
-  content.innerHTML = `<div class="m-body" style="padding-top:26px"><h3>${esc(g.name)}</h3><p style="color:var(--text-4);margin-top:8px">载入中…</p></div>`;
+  openModalShell(`<div class="m-body" style="padding-top:26px"><h3>${esc(g.name)}</h3><p style="color:var(--text-4);margin-top:8px">载入中…</p></div>`);
   try {
     const data = await api(`/api/game/${g.id}`);
     const full = data.game ?? g;
@@ -609,11 +608,20 @@ async function openDetail(g) {
 }
 
 // ---------------- 更新日志 ----------------
-async function openChangelog() {
+function openModalShell(html) {
   const modal = $('#modal');
   const content = $('#modalContent');
   modal.hidden = false;
-  content.innerHTML = `<div class="m-body" style="padding-top:24px"><h3>更新日志</h3><p style="color:var(--text-4);margin-top:8px">载入中…</p></div>`;
+  content.innerHTML = html;
+  // 三个弹窗共用同一个滚动容器，不重置就会沿用上一次的滚动位置（标题被顶飞）
+  const body = modal.querySelector('.modal-body');
+  if (body) body.scrollTop = 0;
+}
+
+async function openChangelog() {
+  const modal = $('#modal');
+  const content = $('#modalContent');
+  openModalShell(`<div class="m-body" style="padding-top:24px"><h3>更新日志</h3><p style="color:var(--text-4);margin-top:8px">载入中…</p></div>`);
 
   let list = [];
   try {
@@ -624,7 +632,7 @@ async function openChangelog() {
   }
 
   const rows = (list || []).slice(0, 40);
-  content.innerHTML = `
+  openModalShell(`
     <div class="m-body" style="padding-top:24px">
       <h3>更新日志</h3>
       <p style="color:var(--text-4);font-size:12.5px;margin-top:6px">
@@ -654,8 +662,7 @@ function closeModal() {
 async function openInfo(g) {
   const modal = $('#modal');
   const content = $('#modalContent');
-  modal.hidden = false;
-  content.innerHTML = `<div class="m-body" style="padding-top:26px"><h3>${esc(g.name)}</h3><p style="color:var(--text-4);margin-top:8px">载入资料…</p></div>`;
+  openModalShell(`<div class="m-body" style="padding-top:26px"><h3>${esc(g.name)}</h3><p style="color:var(--text-4);margin-top:8px">载入资料…</p></div>`);
 
   let full = g;
   try {
