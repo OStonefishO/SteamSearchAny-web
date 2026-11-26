@@ -276,7 +276,6 @@ function renderHero(g) {
         ${tags.map((t) => `<span class="chip tag" data-tag="${t.id}">${esc(t.zh)}</span>`).join('')}
       </div>
       <div class="hero-actions">
-        <button class="btn btn-primary" id="rollAgain">换一批 <kbd>空格</kbd></button>
         <button class="btn" id="heroDetail">看看详情</button>
         <button class="btn" id="heroSimilar">以此找相似</button>
         <a class="btn btn-quiet" href="${STORE(g.id)}" target="_blank" rel="noreferrer">Steam ↗</a>
@@ -295,7 +294,6 @@ function renderHero(g) {
       roll();
       return;
     }
-    if (ev.target.closest('#rollAgain')) roll();
     if (ev.target.closest('#heroDetail')) openDetail(g);
     if (ev.target.closest('#heroSimilar')) {
       addSeed({ id: g.id, name: g.name, img: g.header || CDN(g.id, 'header') });
@@ -337,7 +335,7 @@ function renderRecent() {
 }
 
 async function draw(count, { heroMode = true } = {}) {
-  const params = new URLSearchParams({ mode: state.mode, count: String(count) });
+  const params = new URLSearchParams({ mode: state.mode || 'hidden', count: String(count) });
   if (state.tagIds.length) params.set('tags', state.tagIds.join(','));
   if (state.demoMode && state.demoMode !== 'exclude') params.set('demo', state.demoMode);
   if (state.minPct) params.set('minPct', String(state.minPct));
@@ -427,6 +425,14 @@ function scheduleSimilar() {
   similarTimer = setTimeout(() => runSimilar(), 420);
 }
 
+/** 分数邻域内随机打散：每次检索换一批"同样好"的作品，避免永远看到同十款 */
+function randomizeOrder(list) {
+  return list
+    .map((g) => ({ g, k: (g.score ?? 0) + (Math.random() - 0.5) * 0.05 }))
+    .sort((a, b) => b.k - a.k)
+    .map((x) => x.g);
+}
+
 function renderExplain(data) {
   const box = $('#explain');
   box.hidden = false;
@@ -469,12 +475,14 @@ async function runSimilar() {
     });
     const minRev = Number($('#minRev').value) || 0;
     if (minRev) q.set('minReviews', String(minRev));
+    const maxRev = Number($('#maxRev')?.value) || 0;
+    if (maxRev) q.set('maxReviews', String(maxRev));
     const simPct = Number($('#simPct').value) || 0;
     if (simPct) q.set('minPct', String(simPct));
     if ($('#onlyHidden')?.checked) q.set('maxReviews', '5000');
 
     const data = await api(`/api/similar?${q}`);
-    state.allResults = data.results ?? [];
+    state.allResults = randomizeOrder(data.results ?? []);
     state.shown = Math.min(ui.perPage, state.allResults.length);
     renderExplain(data);
     renderResults();
@@ -762,7 +770,7 @@ async function applyDeepLink() {
       img: c.header,
       weight: Number.isFinite(weights[i]) && weights[i] > 0 ? weights[i] : 1,
     }));
-    state.allResults = data.results ?? [];
+    state.allResults = randomizeOrder(data.results ?? []);
     state.shown = Math.min(PER_PAGE, state.allResults.length);
     renderSeeds();
     renderExplain(data);
@@ -901,9 +909,10 @@ function boot() {
   $$('.tab').forEach((t) => t.addEventListener('click', () => switchView(t.dataset.view)));
   bindTip();
 
-  $$('.seg-btn').forEach((b) =>
+  // 只绑定模式分段控件，别把「卡片尺寸」那组按钮一起卷进来
+  $$('#modeSeg .seg-btn').forEach((b) =>
     b.addEventListener('click', () => {
-      $$('.seg-btn').forEach((x) => x.classList.remove('active'));
+      $$('#modeSeg .seg-btn').forEach((x) => x.classList.remove('active'));
       b.classList.add('active');
       state.mode = b.dataset.mode;
       roll();
@@ -1064,6 +1073,12 @@ function boot() {
     pctTimer = setTimeout(roll, 350);
   });
   $('#onlyHidden')?.addEventListener('change', scheduleSimilar);
+  const maxRevEl = $('#maxRev');
+  maxRevEl?.addEventListener('input', (e) => {
+    const v = Number(e.target.value);
+    $('#maxRevOut').textContent = v ? v.toLocaleString() : '不限';
+    scheduleSimilar();
+  });
 
   // 种子面板事件
   $('#seedChips').addEventListener('input', (ev) => {

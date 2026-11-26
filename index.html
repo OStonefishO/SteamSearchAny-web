@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#070a0e">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗼</text></svg>">
 <link rel="preload" href="fonts/inter-500.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=2026-11-26-11627-5655431-22w1">
+<link rel="stylesheet" href="style.css?v=2026-11-26-11627-5655431-23d5">
   <meta property="og:title" content="Steam 灯塔 · 找到没人注意到的那些游戏">
   <meta property="og:description" content="随机盲盒发现冷门佳作 + 多游戏加权相似检索（静态版，离线可跑）">
 </head>
@@ -186,7 +186,10 @@
           最低好评率 <output id="simPctOut">0%</output>
           <input type="range" id="simPct" min="0" max="100" step="5" value="0">
         </label>
-        <label class="chk"><input type="checkbox" id="onlyHidden"> 只看冷门（评测 &lt; 5000）</label>
+        <label class="slider-label">
+          最高评测数 <output id="maxRevOut">不限</output>
+          <input type="range" id="maxRev" min="0" max="100000" step="1000" value="0">
+        </label>
       </div>
     </div>
 
@@ -226,7 +229,7 @@
 <div class="tip" id="tip" hidden></div>
 
 <script>window.LIGHTHOUSE_STATIC = true;</script>
-<script src="local-api.js?v=2026-11-26-11627-5655431-22w1"></script>
-<script src="app.js?v=2026-11-26-11627-5655431-22w1" type="module"></script>
+<script src="local-api.js?v=2026-11-26-11627-5655431-23d5"></script>
+<script src="app.js?v=2026-11-26-11627-5655431-23d5" type="module"></script>
 </body>
 </html>
