@@ -1010,6 +1010,8 @@ function boot() {
     const fromLink = await applyDeepLink();
     if (!fromLink) roll();
     if (Number.isFinite(gameParam) && gameParam > 0) openDetail({ id: gameParam, name: '载入中…' });
+    const infoParam = Number(new URLSearchParams(location.search).get('info'));
+    if (Number.isFinite(infoParam) && infoParam > 0) openInfo({ id: infoParam, name: '载入中…' });
   })();
 }
 
