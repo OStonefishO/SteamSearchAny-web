@@ -230,6 +230,34 @@ async function main() {
     'utf8'
   );
 
+  // ---- 更新日志：data/changelog.json + CHANGELOG.md ----
+  const stamp = new Date().toISOString().slice(0, 10);
+  let log = [];
+  try {
+    log = JSON.parse(await fs.readFile(path.join(ROOT, 'data', 'changelog.json'), 'utf8'));
+  } catch {
+    log = [];
+  }
+  log.unshift({
+    date: stamp,
+    added: added.length,
+    total: merged.length,
+    tags: Object.keys(tagDict).length,
+  });
+  log = log.slice(0, 200);
+  await fs.writeFile(path.join(ROOT, 'data', 'changelog.json'), JSON.stringify(log, null, 1), 'utf8');
+
+  const md = [
+    '# 更新日志',
+    '',
+    '> 每次自动更新都会在这里追加一行（新游戏入库后立刻可搜、可当相似种子）。',
+    '',
+    '| 日期 | 新增 | 语料总量 | 标签 |',
+    '| --- | --- | --- | --- |',
+    ...log.map((e) => `| ${e.date} | +${e.added} | ${e.total} | ${e.tags} |`),
+    '',
+  ].join('\n');
+  await fs.writeFile(path.join(ROOT, 'CHANGELOG.md'), md, 'utf8');
   console.log(`完成：${games.length} → ${merged.length}（新增 ${added.length} 款，新标签 ${Object.keys(tagDict).length - Object.keys(raw.tagDict || {}).length} 个），用时 ${((Date.now() - t0) / 1000).toFixed(0)}s`);
 }
 

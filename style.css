@@ -349,13 +349,15 @@ select:focus, input[type='text']:focus { border-color: var(--accent-dim); box-sh
   border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
-.card-pill.left { left: 7px; }
-.card-pill.right { right: 7px; color: var(--accent); border-color: rgba(76, 194, 255, 0.28); }
+.card-pill.left { left: 7px; top: 7px; }
+.card-pill.right,
+.card-pill.score { left: 7px; right: auto; top: 33px; }
+.card-pill.right { color: var(--accent); border-color: rgba(76, 194, 255, 0.28); }
 .card-pill.score {
-  right: 7px; height: 22px; padding: 0 8px; border-radius: 6px;
-  background: linear-gradient(180deg, #7ad2ff, #43b3ea); color: #04141e;
-  border-color: transparent; font-size: 12px; font-weight: 700;
-  box-shadow: 0 6px 16px -8px rgba(76, 194, 255, 0.9);
+  height: 22px; padding: 0 8px; border-radius: 6px;
+  background: #45bdf7; color: #04141e;
+  border-color: #7fd4fb; font-size: 12px; font-weight: 700;
+  box-shadow: 0 6px 16px -8px rgba(69, 189, 247, 0.9);
 }
 .card-pill.good { color: var(--lime); border-color: rgba(182, 224, 74, 0.26); }
 .card-pill.mid { color: var(--amber); border-color: rgba(255, 187, 85, 0.26); }
@@ -392,6 +394,53 @@ select:focus, input[type='text']:focus { border-color: var(--accent-dim); box-sh
 }
 .card:hover .card-seed { opacity: 1; }
 .card-seed:hover { color: #04121b; background: var(--accent); border-color: var(--accent); }
+
+/* 右上角资料按钮 */
+.card-info {
+  position: absolute; top: 6px; right: 6px; z-index: 3;
+  width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 13px; font-weight: 700;
+  background: rgba(5, 9, 14, 0.8); color: #cfe6f7;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.16s ease; backdrop-filter: blur(3px);
+}
+.card-info:hover { color: #05161f; background: #45bdf7; border-color: #9fe1ff; transform: scale(1.1); }
+
+/* 资料面板 */
+.info-bar { padding: 14px 20px 12px; border-bottom: 1px solid var(--line); }
+.info-tags { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.info-tags::-webkit-scrollbar { display: none; }
+.info-tags .chip { flex: none; }
+.info-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.info-gem { font-size: 11px; padding: 2px 8px; border-radius: 6px; background: rgba(182, 224, 74, 0.14); border: 1px solid rgba(182, 224, 74, 0.32); color: var(--lime); }
+.info-alt { font-size: 12.5px; color: var(--text-4); margin-top: 4px; }
+.info-stats { display: flex; gap: 22px; flex-wrap: wrap; margin: 16px 0 4px; }
+.info-stats .stat b { display: block; font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+.info-stats .stat span { font-size: 11px; color: var(--text-4); letter-spacing: 0.06em; }
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.info-block { margin-top: 16px; }
+.info-block h4 {
+  font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-4); font-weight: 600; margin-bottom: 6px;
+}
+.info-block p { font-size: 13px; color: var(--text-2); line-height: 1.65; }
+.info-req {
+  font-size: 12.5px; line-height: 1.75; color: var(--text-2);
+  background: #0a1219; border: 1px solid var(--line); border-radius: 9px; padding: 11px 13px;
+  font-variant-numeric: tabular-nums; white-space: pre-wrap;
+}
+.info-empty { font-size: 12px; color: var(--text-4); border: 1px dashed var(--line-2); border-radius: 9px; padding: 12px; }
+
+/* 更新日志表格 */
+.log-table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.log-table th {
+  text-align: left; font-weight: 600; font-size: 11px; letter-spacing: 0.08em;
+  color: var(--text-4); text-transform: uppercase; padding: 8px 10px; border-bottom: 1px solid var(--line-2);
+}
+.log-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); color: var(--text-2); }
+.log-table tr:hover td { background: #0f1a24; }
+.log-table .plus { color: var(--lime); font-weight: 600; }
 
 /* 空状态 */
 .empty-state { grid-column: 1 / -1; padding: 56px 20px; text-align: center; color: var(--text-3); font-size: 14px; }

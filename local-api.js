@@ -53,12 +53,15 @@
       const byId = new Map();
 
       for (let i = 0; i < raw.games.length; i += 1) {
-        const [id, name, tags, total, pct, labelIdx, year, price, free, alt, desc] = raw.games[i];
+        const [id, name, tags, total, pct, labelIdx, year, price, free, alt, desc, extra] = raw.games[i];
         const g = {
           id,
           name,
           alt: alt || null,
           desc: desc || null,
+          dev: extra?.[0] || null,
+          pub: extra?.[1] || null,
+          req: extra?.[2] || null,
           tags, // [[tagId, weight], ...]
           rev: total ? { total, pct, label: labels[labelIdx] || null } : null,
           year: year || null,

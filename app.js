@@ -162,6 +162,7 @@ function cardHtml(g, index, { score = false } = {}) {
       ${imgTag(g.cover || CDN(g.id, 'cover'), g.name, g.id)}
       ${score ? '' : ratingPill}
       ${right}
+      <button class="card-info" data-info="${g.id}" title="游戏资料" aria-label="游戏资料">i</button>
       <button class="card-seed" data-seed="${g.id}" title="加为相似种子">＋</button>
       <div class="card-foot">
         <div class="card-title">${esc(g.name)}</div>
@@ -178,6 +179,13 @@ function renderGrid(el, items, opts = {}) {
 // 事件委托，一次绑定
 function bindGrid(el, resolve) {
   el.addEventListener('click', (ev) => {
+    const infoBtn = ev.target.closest('[data-info]');
+    if (infoBtn) {
+      ev.stopPropagation();
+      const g = resolve(Number(infoBtn.dataset.info));
+      if (g) openInfo(g);
+      return;
+    }
     const seedBtn = ev.target.closest('[data-seed]');
     if (seedBtn) {
       ev.stopPropagation();
@@ -551,8 +559,123 @@ async function openDetail(g) {
   }
 }
 
+// ---------------- 更新日志 ----------------
+async function openChangelog() {
+  const modal = $('#modal');
+  const content = $('#modalContent');
+  modal.hidden = false;
+  content.innerHTML = `<div class="m-body" style="padding-top:24px"><h3>更新日志</h3><p style="color:var(--text-4);margin-top:8px">载入中…</p></div>`;
+
+  let list = [];
+  try {
+    const res = await fetch(new URL('data/changelog.json', document.baseURI).href, { cache: 'no-store' });
+    if (res.ok) list = await res.json();
+  } catch {
+    /* 本地服务没有这个文件 */
+  }
+
+  const rows = (list || []).slice(0, 40);
+  content.innerHTML = `
+    <div class="m-body" style="padding-top:24px">
+      <h3>更新日志</h3>
+      <p style="color:var(--text-4);font-size:12.5px;margin-top:6px">
+        每天 11:10（北京时间）由 GitHub Actions 自动抓新游戏入库，抓到后立刻可搜、可当相似种子。
+      </p>
+      ${
+        rows.length
+          ? `<table class="log-table">
+              <thead><tr><th>日期</th><th>新增</th><th>语料总量</th><th>标签</th></tr></thead>
+              <tbody>${rows
+                .map(
+                  (e) =>
+                    `<tr><td>${esc(e.date)}</td><td class="plus">${e.added > 0 ? '+' + e.added : '—'}</td><td>${Number(e.total).toLocaleString()}</td><td>${e.tags ?? '—'}</td></tr>`
+                )
+                .join('')}</tbody>
+            </table>`
+          : `<p style="color:var(--text-3);font-size:13px;margin-top:14px">暂无记录 —— 下一次自动更新后会出现在这里。</p>`
+      }
+    </div>`;
+}
+
 function closeModal() {
   $('#modal').hidden = true;
+}
+
+// ---------------- 游戏资料面板（SteamDB 风格）----------------
+async function openInfo(g) {
+  const modal = $('#modal');
+  const content = $('#modalContent');
+  modal.hidden = false;
+  content.innerHTML = `<div class="m-body" style="padding-top:26px"><h3>${esc(g.name)}</h3><p style="color:var(--text-4);margin-top:8px">载入资料…</p></div>`;
+
+  let full = g;
+  try {
+    const data = await api(`/api/game/${g.id}`);
+    full = data.game ?? g;
+  } catch {
+    /* 静态版没有该接口时用卡片数据兜底 */
+  }
+
+  const rev = full.rev ?? { total: 0, pct: 0, label: null };
+  const tags = full.tags ?? [];
+  const yt = `https://www.youtube.com/results?search_query=${encodeURIComponent(`${full.alt || full.name} gameplay`)}`;
+
+  const reqHtml = full.req
+    ? `<div class="info-req">${esc(full.req).replace(/\n/g, '<br>')}</div>`
+    : `<div class="info-empty">系统需求尚未收录 · 每日自动补全中</div>`;
+
+  content.innerHTML = `
+    <div class="info-bar">
+      <div class="info-tags">${tags.slice(0, 10).map((t) => `<span class="chip tag">${esc(t.zh)}</span>`).join('')}</div>
+    </div>
+    <div class="m-hero">${imgTag(full.header || CDN(full.id, 'header'), full.name, full.id)}</div>
+    <div class="m-body">
+      <div class="info-title-row">
+        <h3>${esc(full.name)}</h3>
+        ${full.gem ? `<span class="info-gem">冷门 ${full.gem}</span>` : ''}
+      </div>
+      ${full.alt ? `<div class="info-alt">${esc(full.alt)}</div>` : ''}
+
+      <div class="info-stats">
+        <div class="stat"><b class="${pctClass(rev.pct)}">${rev.total ? rev.pct + '%' : '—'}</b><span>好评率</span></div>
+        <div class="stat"><b>${rev.total.toLocaleString()}</b><span>评测数</span></div>
+        <div class="stat"><b>${full.year ?? '—'}</b><span>发售年</span></div>
+        <div class="stat"><b>${esc(full.price ?? (full.free ? '免费' : '—'))}</b><span>价格</span></div>
+      </div>
+
+      ${full.desc ? `<div class="info-block"><h4>简介</h4><p>${esc(full.desc)}</p></div>` : ''}
+
+      <div class="info-grid">
+        <div class="info-block">
+          <h4>开发商 / 发行商</h4>
+          <p>${esc(full.dev || '—')}${full.pub && full.pub !== full.dev ? ` · ${esc(full.pub)}` : ''}</p>
+        </div>
+        <div class="info-block">
+          <h4>标签</h4>
+          <p>${tags.length ? tags.slice(0, 8).map((t) => esc(t.zh)).join(' / ') : '—'}</p>
+        </div>
+      </div>
+
+      <div class="info-block">
+        <h4>系统需求（最低配置）</h4>
+        ${reqHtml}
+      </div>
+
+      <div class="hero-actions" style="margin-top:20px">
+        <a class="btn btn-primary" href="${STORE(full.id)}" target="_blank" rel="noreferrer">Steam 商店 ↗</a>
+        <a class="btn" href="${yt}" target="_blank" rel="noreferrer">YouTube ↗</a>
+        <button class="btn" id="infoSeed">加为种子</button>
+        <button class="btn btn-quiet" id="infoDetail">完整详情</button>
+      </div>
+    </div>`;
+
+  $('#infoSeed', content)?.addEventListener('click', () => {
+    addSeed({ id: full.id, name: full.name, img: full.header || CDN(full.id, 'header') });
+    closeModal();
+    switchView('similar');
+    runSimilar();
+  });
+  $('#infoDetail', content)?.addEventListener('click', () => openDetail(full));
 }
 
 // ---------------- 视图 ----------------
@@ -877,6 +1000,7 @@ function boot() {
   });
 
   $$('[data-close]').forEach((el) => el.addEventListener('click', closeModal));
+  $('#changelogBtn')?.addEventListener('click', openChangelog);
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !$('#modal').hidden) closeModal();
   });
