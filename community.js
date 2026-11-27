@@ -712,36 +712,160 @@ export async function openAuthor(name, uid) {
   if (!m) return;
   m.hidden = false;
   box.innerHTML = `<div class="m-body"><h3>${esc(name)}</h3><p style="color:var(--text-4);font-size:12px">读取中…</p></div>`;
+
+  let prof = null;
+  let posts = [];
   try {
     const filter = uid ? `author_id=eq.${uid}` : `author_name=eq.${encodeURIComponent(name)}`;
-    const rows = await rest(`/rest/v1/posts?select=id,title,game_name,body,author_avatar,author_id,created_at&` + filter + `&order=created_at.desc&limit=20`);
+    posts = await rest(`/rest/v1/posts?select=id,title,game_name,body,images,author_avatar,author_id,created_at&` + filter + `&order=created_at.desc&limit=30`) || [];
+  } catch {}
+  try {
+    const q = uid ? `uid=eq.${uid}` : `name=eq.${encodeURIComponent(name)}`;
+    const ps = await rest('/rest/v1/profiles?select=user_email,uid,name,bio,avatar&' + q + '&limit=1');
+    prof = ps && ps[0];
+  } catch {}
 
-    let prof = null;
-    try {
-      const q = uid ? `uid=eq.${uid}` : `name=eq.${encodeURIComponent(name)}`;
-      const ps = await rest('/rest/v1/profiles?select=user_email,uid,name,bio,avatar&' + q + '&limit=1');
-      prof = ps && ps[0];
-    } catch (e) {}
-    const bioText = (prof && prof.bio) ? prof.bio : '这个人懒得写简介';
-    const av = (prof && prof.avatar) || (rows[0] && rows[0].author_avatar) || '🎮';
-    box.innerHTML = `<div class="m-body">
-      <div class="profile-head">${avatarHtml({ avatar: av.startsWith('data:') ? '🎮' : av, img: av.startsWith('data:') ? av : '' }, 56)}
-        <div><div class="profile-name">${esc(name)}<span class="post-uid">#${uid || (rows[0] && rows[0].author_id) || '----'}</span></div>
-        <div class="profile-mail">${rows.length} 篇帖子</div></div></div>
-      <p class="author-bio">${esc(bioText)}</p>
-      <div id="friendSlot"></div>
-      ${rows.map((x) => `<div class="author-post"><b>${esc(x.title || '无标题')}</b>
-        <div class="post-meta">${esc(x.game_name)} · ${timeAgo(x.created_at)}</div>
-        <p class="post-body" style="margin:6px 0 0">${esc(x.body)}</p></div>`).join('')}</div>`;
-  } catch (e) {
-    box.innerHTML = `<div class="m-body"><h3>${esc(name)}</h3><p style="color:var(--text-3)">读取失败：${esc(e.message)}</p></div>`;
-    return;
-  }
+  const target = (prof && prof.user_email) || '';
+  const uidShown = uid || (prof && prof.uid) || (posts[0] && posts[0].author_id) || '';
+  const av0 = (prof && prof.avatar) || (posts[0] && posts[0].author_avatar) || '🎮';
+  const bioText = (prof && prof.bio) ? prof.bio : '这个人懒得写简介';
+  const me = currentEmail();
+
+  // 隐私开关（没跑 db/social.sql 时读不到 → 全开）
+  const priv = await loadPrivacy(target);
+  const favIds = priv.showFavs && target ? await loadUserFavs(target) : [];
+  const gallery = priv.showGallery ? collectImages(posts) : [];
+  const wall = priv.allowWall && target ? await loadWall(target) : [];
+
+  box.innerHTML = `<div class="m-body">
+    <div class="author-hero">
+      <div class="author-top">
+        <span class="author-av">${avatarHtml({ avatar: av0.startsWith('data:') ? '🎮' : av0, img: av0.startsWith('data:') ? av0 : '' }, 68)}</span>
+        <div class="author-id">
+          <div class="author-name">${esc(name)}<span class="post-uid">#${uidShown || '----'}</span></div>
+          <p class="author-bio-line">${esc(bioText)}</p>
+        </div>
+        <div class="author-actions" id="friendSlot"></div>
+      </div>
+      <div class="author-stats">
+        <div class="author-stat"><b>${posts.length}</b><span>帖子</span></div>
+        <div class="author-stat"><b>${priv.showFavs ? favIds.length : '—'}</b><span>收藏</span></div>
+        <div class="author-stat"><b>${priv.showGallery ? gallery.length : '—'}</b><span>图片</span></div>
+        <div class="author-stat"><b>${priv.allowWall ? wall.length : '—'}</b><span>留言</span></div>
+      </div>
+    </div>
+
+    <nav class="author-tabs" id="authorTabs">
+      <button class="author-tab on" data-atab="posts">帖子 <i>${posts.length}</i></button>
+      ${priv.showFavs ? `<button class="author-tab" data-atab="favs">收藏夹 <i>${favIds.length}</i></button>` : ''}
+      ${priv.showGallery && gallery.length ? `<button class="author-tab" data-atab="gallery">图片 <i>${gallery.length}</i></button>` : ''}
+      ${priv.allowWall ? `<button class="author-tab" data-atab="wall">留言板 <i>${wall.length}</i></button>` : ''}
+    </nav>
+    <div id="authorPane"></div>
+  </div>`;
+
+  const pane = box.querySelector('#authorPane');
+
+  const paintWall = (rows) => {
+    pane.innerHTML = `<div class="wall-box">
+      ${me ? `<div class="wall-add"><input class="input sm" id="wallInput" maxlength="120" placeholder="${me === target ? '给自己留句话…' : '给 TA 留句话…'}">
+        <button class="btn btn-sm btn-primary" id="wallSend">发送</button></div>`
+        : '<p class="wall-login">登录后才能留言</p>'}
+      <div class="wall-list" id="wallList">${rows.length ? rows.map((w) => `
+        <div class="wall-item" data-wid="${w.id}">
+          ${avatarHtml({ avatar: String(w.author_avatar || '🎮').startsWith('data:') ? '🎮' : (w.author_avatar || '🎮'), img: String(w.author_avatar || '').startsWith('data:') ? w.author_avatar : '' }, 32)}
+          <div class="wall-main">
+            <div class="wall-top"><b>${esc(w.author_name || w.author_email || '某人')}</b><span class="post-meta">${timeAgo(w.created_at)}</span></div>
+            <p class="wall-body">${esc(w.body)}</p>
+          </div>
+          ${me && (w.author_email === me || target === me) ? `<button class="wall-del" data-wdel="${w.id}" title="删除">×</button>` : ''}
+        </div>`).join('') : '<div class="me-empty">还没有人留言，来抢第一条</div>'}</div>
+    </div>`;
+
+    const sendBtn = pane.querySelector('#wallSend');
+    if (sendBtn) {
+      sendBtn.onclick = async () => {
+        const input = pane.querySelector('#wallInput');
+        const body = (input.value || '').trim();
+        if (!body) return;
+        sendBtn.disabled = true;
+        try {
+          const p = profile();
+          await rest('/rest/v1/wall_messages', {
+            method: 'POST',
+            headers: { Prefer: 'return=minimal' },
+            body: [{ target_email: target, author_email: me, author_name: p.name, author_avatar: p.img || p.avatar, body }],
+          });
+          input.value = '';
+          toast('留言成功');
+          paintWall(await loadWall(target));
+        } catch (e) {
+          toast('留言失败：' + e.message);
+          sendBtn.disabled = false;
+        }
+      };
+    }
+    pane.querySelectorAll('[data-wdel]').forEach((b) => {
+      b.onclick = async () => {
+        if (!confirm('删除这条留言？')) return;
+        try {
+          await rest('/rest/v1/wall_messages?id=eq.' + b.dataset.wdel, { method: 'DELETE' });
+          paintWall(await loadWall(target));
+        } catch (e) {
+          toast('删除失败：' + e.message);
+        }
+      };
+    });
+  };
+
+  const paint = async (tab) => {
+    box.querySelectorAll('.author-tab').forEach((t) => t.classList.toggle('on', t.dataset.atab === tab));
+    if (tab === 'favs') {
+      pane.innerHTML = '<div class="empty-state"><span class="spin"></span>读取收藏…</div>';
+      const games = await fetchGamesByIds(favIds);
+      pane.innerHTML = games.length
+        ? `<div class="fav-grid">${games.map(favCardHtml).join('')}</div>`
+        : '<div class="me-empty">收藏里的游戏暂时不在语料里</div>';
+      // 看别人的收藏：不显示「取消收藏」星标，只留可点的卡片
+      if (me !== target) pane.querySelectorAll('.fav-star').forEach((b) => b.remove());
+      pane.querySelectorAll('[data-unfav]').forEach((b) => {
+        b.onclick = (ev) => {
+          ev.stopPropagation();
+          const id = Number(b.dataset.unfav);
+          favToggle(id);
+          const i = favIds.indexOf(id);
+          if (i >= 0) favIds.splice(i, 1);
+          paint('favs');
+        };
+      });
+      pane.querySelectorAll('[data-gid]').forEach((el) => {
+        el.onclick = (ev) => {
+          if (ev.target.closest('[data-unfav]')) return;
+          document.dispatchEvent(new CustomEvent('lh:openGame', { detail: { id: Number(el.dataset.gid) } }));
+        };
+      });
+      return;
+    }
+    if (tab === 'gallery') {
+      pane.innerHTML = `<div class="author-gallery">${gallery.map((src) => mediaHtml(src, 'author-shot')).join('')}</div>`;
+      return;
+    }
+    if (tab === 'wall') return paintWall(wall);
+    pane.innerHTML = posts.length
+      ? `<div class="author-posts">${posts.map((x) => `<div class="author-post"><b>${esc(x.title || '无标题')}</b>
+          <div class="post-meta">${esc(x.game_name || '闲聊')} · ${timeAgo(x.created_at)}</div>
+          <p class="post-body" style="margin:6px 0 0">${esc((x.body || '').slice(0, 140))}</p></div>`).join('')}</div>`
+      : '<div class="me-empty">还没有发过帖子</div>';
+  };
+
+  box.querySelector('#authorTabs').onclick = (ev) => {
+    const t = ev.target.closest('.author-tab');
+    if (t) paint(t.dataset.atab);
+  };
+  paint('posts');
 
   // 好友按钮
   const slot = box.querySelector('#friendSlot');
-  const me = currentEmail();
-  const target = prof && prof.user_email;
   if (!slot || !me || !target || target === me) return;
   try {
     const rel = await rest('/rest/v1/friends?select=a_email&a_email=eq.' + encodeURIComponent(me) + '&b_email=eq.' + encodeURIComponent(target));
@@ -769,6 +893,73 @@ export async function openAuthor(name, uid) {
       };
     }
   } catch (e) {}
+}
+
+/* ---------- 主页/隐私用的小工具 ---------- */
+const PRIV_DEFAULT = { showFavs: true, showGallery: true, allowWall: true };
+
+async function loadPrivacy(email) {
+  if (!email) return { ...PRIV_DEFAULT };
+  try {
+    const rows = await rest('/rest/v1/profile_settings?select=show_favs,show_gallery,allow_wall&user_email=eq.' + encodeURIComponent(email) + '&limit=1');
+    const r = rows && rows[0];
+    if (!r) return { ...PRIV_DEFAULT };
+    return { showFavs: r.show_favs !== false, showGallery: r.show_gallery !== false, allowWall: r.allow_wall !== false };
+  } catch {
+    return { ...PRIV_DEFAULT };
+  }
+}
+
+async function savePrivacy(email, priv) {
+  await rest('/rest/v1/profile_settings', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: [{ user_email: email, show_favs: priv.showFavs, show_gallery: priv.showGallery, allow_wall: priv.allowWall, updated_at: new Date().toISOString() }],
+  });
+}
+
+async function loadUserFavs(email) {
+  try {
+    const rows = await rest('/rest/v1/user_favs?select=game_id&user_email=eq.' + encodeURIComponent(email) + '&order=created_at.desc&limit=30');
+    return (rows || []).map((r) => Number(r.game_id)).filter((n) => n > 0);
+  } catch {
+    return [];
+  }
+}
+
+function collectImages(posts) {
+  const out = [];
+  for (const p of posts || []) {
+    for (const src of Array.isArray(p.images) ? p.images : []) {
+      if (out.length >= 12) return out;
+      out.push(src);
+    }
+  }
+  return out;
+}
+
+async function loadWall(email) {
+  try {
+    const rows = await rest('/rest/v1/wall_messages?select=id,author_email,author_name,author_avatar,body,created_at&target_email=eq.' + encodeURIComponent(email) + '&order=created_at.desc&limit=30');
+    return rows || [];
+  } catch {
+    return [];
+  }
+}
+
+/** 按 id 批量取游戏（本地语料的 /api/byids） */
+async function fetchGamesByIds(ids) {
+  const list = (ids || []).slice(0, 200);
+  if (!list.length) return [];
+  try {
+    const r = await fetch('/api/byids?ids=' + list.join(','), { headers: { Accept: 'application/json' } });
+    const d = await r.json();
+    const items = (d && d.items) || [];
+    const byId = new Map(items.map((g) => [g.id, g]));
+    return list.map((id) => byId.get(id)).filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
 function toast(t) { if (window.LH_TOAST) return window.LH_TOAST(t); }
@@ -829,7 +1020,7 @@ export async function renderMe(root) {
   if (!root) return;
   const me0 = profile();
   const mail = currentEmail();
-  let tab = localStorage.getItem(ME_TAB_KEY) === 'posts' ? 'posts' : 'fav';
+  let tab = ['posts', 'priv'].includes(localStorage.getItem(ME_TAB_KEY)) ? localStorage.getItem(ME_TAB_KEY) : 'fav';
   let favLoaded = null;   // 收藏条目缓存，切 tab 不重复拉
   let postRows = null;
   let alive = true;
@@ -856,6 +1047,7 @@ export async function renderMe(root) {
     '<nav class="me-tabs">' +
       '<button class="me-tab" data-mtab="fav">收藏夹 <i id="meFavC">' + favIdList().length + '</i></button>' +
       '<button class="me-tab" data-mtab="posts">我的帖子 <i id="mePostC">' + (postRows ? postRows.length : 0) + '</i></button>' +
+      '<button class="me-tab" data-mtab="priv">隐私设置</button>' +
       '<span class="me-tab-hint">以后的新功能也会长在这里</span>' +
     '</nav>' +
     '<div id="mePane"><div class="empty-state"><span class="spin"></span></div></div>';
@@ -971,14 +1163,70 @@ export async function renderMe(root) {
     });
   };
 
+  const paintPrivacy = async () => {
+    if (!alive) return;
+    const em = currentEmail();
+    if (!em) {
+      pane.innerHTML = '<div class="me-empty"><span class="big">🔒</span>登录后才能设置隐私<br><br>' +
+        '<button class="btn btn-primary btn-sm" id="meLogin3">去登录</button></div>';
+      const b = pane.querySelector('#meLogin3');
+      if (b) b.onclick = () => openLogin();
+      return;
+    }
+    pane.innerHTML = '<div class="empty-state"><span class="spin"></span>读取设置…</div>';
+    const priv = await loadPrivacy(em);
+    if (!alive) return;
+    const row = (key, title, desc, on) =>
+      '<label class="priv-row">' +
+        '<span class="priv-tx"><b>' + title + '</b><em>' + desc + '</em></span>' +
+        '<input type="checkbox" class="switch" data-priv="' + key + '"' + (on ? ' checked' : '') + '>' +
+      '</label>';
+    pane.innerHTML = '<div class="priv-box">' +
+        row('showFavs', '收藏夹', '别人能在你的主页看到你收藏的游戏', priv.showFavs) +
+        row('showGallery', '图片墙', '把帖子里的图片展示在你的主页', priv.showGallery) +
+        row('allowWall', '留言板', '允许别人在你的主页留言', priv.allowWall) +
+      '</div>' +
+      '<div class="share-actions"><button class="btn btn-primary" id="privSave">保存设置</button></div>' +
+      '<p class="me-foot">设置存在云端，换设备也生效；关闭后别人主页上对应那一栏直接消失</p>';
+
+    pane.querySelector('#privSave').onclick = async (ev) => {
+      const btn = ev.currentTarget;
+      const next = {
+        showFavs: pane.querySelector('[data-priv="showFavs"]').checked,
+        showGallery: pane.querySelector('[data-priv="showGallery"]').checked,
+        allowWall: pane.querySelector('[data-priv="allowWall"]').checked,
+      };
+      btn.disabled = true;
+      const old = btn.textContent;
+      btn.textContent = '保存中…';
+      try {
+        await savePrivacy(em, next);
+        toast('隐私设置已保存');
+      } catch (e) {
+        const m2 = String(e.message || e);
+        toast(/relation .* does not exist|Could not find the table/i.test(m2)
+          ? '云端还没有 profile_settings 表，先跑 db/social.sql'
+          : '保存失败：' + m2);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = old;
+      }
+    };
+  };
+
   const paint = async (force) => {
     setTabBtns();
     localStorage.setItem(ME_TAB_KEY, tab);
-    if (tab === 'fav') await paintFavs(force); else await paintPosts(force);
+    if (tab === 'priv') await paintPrivacy();
+    else if (tab === 'fav') await paintFavs(force);
+    else await paintPosts(force);
   };
 
   root.querySelectorAll('[data-mtab]').forEach((b) => {
-    b.onclick = () => { tab = b.dataset.mtab === 'posts' ? 'posts' : 'fav'; paint(); };
+    b.onclick = () => {
+      tab = ['posts', 'priv'].includes(b.dataset.mtab) ? b.dataset.mtab : 'fav';
+      paint();
+    };
   });
   const editBtn = root.querySelector('#meEdit');
   if (editBtn) editBtn.onclick = () => openLogin();

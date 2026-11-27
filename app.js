@@ -106,8 +106,36 @@ function toggleFav(id, name) {
   }
   favSave();
   syncFavButtons();
+  favSync(n, on);
   toast(on ? `已收藏${name ? '：' + name : ''}` : '已取消收藏');
   return on;
+}
+
+/** 收藏同步到云端（登录后），主页才能展示别人的收藏夹 */
+function favSync(id, on) {
+  try {
+    const s = JSON.parse(localStorage.getItem('lh.auth') || 'null');
+    const cfg = window.LIGHTHOUSE_SUPABASE || {};
+    if (!s || !s.access_token || !s.email || !cfg.url) return;
+    const headers = {
+      apikey: cfg.anonKey,
+      Authorization: 'Bearer ' + s.access_token,
+      'Content-Type': 'application/json',
+      Prefer: on ? 'resolution=ignore-duplicates,return=minimal' : 'return=minimal',
+    };
+    if (on) {
+      fetch(cfg.url + '/rest/v1/user_favs', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify([{ user_email: s.email, game_id: Number(id) }]),
+      }).catch(() => {});
+    } else {
+      fetch(cfg.url + '/rest/v1/user_favs?user_email=eq.' + encodeURIComponent(s.email) + '&game_id=eq.' + Number(id), {
+        method: 'DELETE',
+        headers,
+      }).catch(() => {});
+    }
+  } catch {}
 }
 function favBtnHtml(id) {
   const on = favHas(id);
