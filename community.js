@@ -264,12 +264,7 @@ export function openLogin() {
     const forgot = document.createElement('p');
     forgot.style.cssText = 'font-size:12px;color:var(--text-4);margin-top:10px;cursor:pointer;text-align:right';
     forgot.textContent = '忘记密码？';
-    forgot.onclick = async () => {
-      const em = box.querySelector('#pwEmail').value.trim();
-      if (!em) return (pwMsg.textContent = '先填邮箱');
-      try { await recoverPassword(em); pwMsg.textContent = '恢复邮件已发送，点邮件里的链接登录后重新设置密码'; }
-      catch (e) { pwMsg.textContent = '失败：' + e.message; }
-    };
+    forgot.onclick = () => openRecover();
     pwPane.appendChild(forgot);
 
     const pwMsg = box.querySelector('#pwMsg');
@@ -318,9 +313,10 @@ export function openLogin() {
     <label class="field-label">主题色</label>
     <div class="picker" id="pColors">${COLORS.map((c) => `<button class="pick-dot ${c === p.color ? 'on' : ''}" data-c="${c}" style="background:${c}"></button>`).join('')}</div>
     <label class="field-label">登录密码（设置后可在任意设备用邮箱+密码登录）</label>
-    <div style="display:flex;gap:8px">
-      <input class="input" id="newPw" type="password" placeholder="至少 6 位" autocomplete="new-password">
-      <button class="btn" id="setPwBtn">设置</button>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <input class="input" id="newPw" type="password" placeholder="设置密码（至少 6 位）" autocomplete="new-password">
+      <input class="input" id="newPw2" type="password" placeholder="再输一次确认" autocomplete="new-password">
+      <button class="btn" id="setPwBtn" style="align-self:flex-start">设置密码</button>
     </div>
     <p id="pwInfo" style="font-size:11.5px;color:var(--text-4);margin-top:6px"></p>
 
@@ -371,12 +367,20 @@ export function openLogin() {
     setPwBtn.parentElement.insertAdjacentElement('afterend', sendBtn);
   }
   if (setPwBtn) setPwBtn.onclick = async () => {
-    const pw = box.querySelector('#newPw').value;
+    const a = box.querySelector('#newPw').value;
+    const b = box.querySelector('#newPw2').value;
     const info = box.querySelector('#pwInfo');
-    if (!pw || pw.length < 6) return (info.textContent = '密码至少 6 位');
+    if (!a || a.length < 6) return (info.textContent = '密码至少 6 位');
+    if (a !== b) return (info.textContent = '两次输入的密码不一致');
     info.textContent = '设置中…';
-    try { await setPassword(pw); info.textContent = '✓ 密码已设置，可在其他设备用邮箱+密码登录'; box.querySelector('#newPw').value = ''; }
-    catch (e) { info.textContent = '失败：' + e.message; }
+    try {
+      await setPassword(a);
+      info.textContent = '✓ 密码已设置，可在任意设备用邮箱+密码登录';
+      box.querySelector('#newPw').value = '';
+      box.querySelector('#newPw2').value = '';
+    } catch (e) {
+      info.textContent = '失败：' + e.message;
+    }
   };
 
   box.querySelector('#doLogout').onclick = () => { DRAFT = null; logout(); m.hidden = true; location.reload(); };
@@ -929,3 +933,72 @@ export async function recoverPassword(email) {
   }
   return true;
 }
+
+
+/* ================= 找回密码 ================= */
+export function openRecover() {
+  const m = document.getElementById('modal');
+  const box = document.getElementById('modalContent');
+  if (!m) return;
+  m.hidden = false;
+  box.innerHTML = '<div class="m-body">' +
+    '<h3>找回密码</h3>' +
+    '<p style="color:var(--text-3);font-size:13px;margin:8px 0 14px">输入注册邮箱，我们会发一封重置邮件。点邮件里的链接即可重设密码。</p>' +
+    '<input class="input" id="rcEmail" type="email" placeholder="you@example.com" autocomplete="email">' +
+    '<button class="btn btn-primary btn-block" id="rcSend" style="margin-top:10px">发送重置邮件</button>' +
+    '<p id="rcMsg" style="font-size:12px;color:var(--text-4);margin-top:10px"></p>' +
+    '<button class="btn btn-block" id="rcBack" style="margin-top:14px">返回登录</button>' +
+    '</div>';
+  const msg = box.querySelector('#rcMsg');
+  box.querySelector('#rcBack').onclick = () => openLogin();
+  box.querySelector('#rcSend').onclick = async () => {
+    const em = box.querySelector('#rcEmail').value.trim();
+    if (!em) return (msg.textContent = '请填邮箱');
+    msg.textContent = '发送中…';
+    try {
+      await recoverPassword(em);
+      msg.textContent = '✓ 已发送。到邮箱点开链接后会跳回本站，然后设置新密码。';
+    } catch (e) {
+      msg.textContent = '失败：' + e.message;
+    }
+  };
+}
+
+/** 从重置邮件回来时，直接给"设置新密码"界面 */
+export function openResetPassword() {
+  const m = document.getElementById('modal');
+  const box = document.getElementById('modalContent');
+  if (!m) return;
+  if (!currentEmail()) return openRecover();
+  m.hidden = false;
+  box.innerHTML = '<div class="m-body">' +
+    '<h3>设置新密码</h3>' +
+    '<p style="color:var(--text-3);font-size:13px;margin:8px 0 14px">为 ' + esc(currentEmail()) + ' 设置一个新密码。</p>' +
+    '<input class="input" id="np1" type="password" placeholder="新密码（至少 6 位）" autocomplete="new-password">' +
+    '<input class="input" id="np2" type="password" placeholder="再输一次确认" style="margin-top:8px" autocomplete="new-password">' +
+    '<button class="btn btn-primary btn-block" id="npGo" style="margin-top:10px">保存新密码</button>' +
+    '<p id="npMsg" style="font-size:12px;color:var(--text-4);margin-top:10px"></p>' +
+    '</div>';
+  const msg = box.querySelector('#npMsg');
+  box.querySelector('#npGo').onclick = async () => {
+    const a = box.querySelector('#np1').value;
+    const b = box.querySelector('#np2').value;
+    if (!a || a.length < 6) return (msg.textContent = '密码至少 6 位');
+    if (a !== b) return (msg.textContent = '两次输入的密码不一致');
+    msg.textContent = '保存中…';
+    try {
+      await setPassword(a);
+      msg.textContent = '✓ 已保存，以后用邮箱+新密码登录';
+    } catch (e) {
+      msg.textContent = '失败：' + e.message;
+    }
+  };
+}
+
+/* 从重置邮件点回来（URL 带 type=recovery）时自动弹出重设界面 */
+try {
+  const hash = decodeURIComponent(location.hash || '');
+  if (hash.includes('type=recovery') || hash.includes('type%3Drecovery')) {
+    setTimeout(() => { try { openResetPassword(); } catch {} }, 900);
+  }
+} catch {}
