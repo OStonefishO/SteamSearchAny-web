@@ -1011,13 +1011,57 @@ textarea.input { resize: vertical; min-height: 96px; }
 
 
 /* 好友面板 */
-.fr-sec { margin-bottom: 18px; }
-.fr-t { font-size: 12px; color: var(--text-4); letter-spacing: .04em; margin-bottom: 8px; }
-.fr-row {
-  display: flex; align-items: center; gap: 10px; padding: 9px 10px;
-  border-radius: 10px; background: #0a121a; border: 1px solid var(--line); margin-bottom: 8px;
+#friendBody { display: flex; flex-direction: column; gap: 14px; margin-top: 6px; }
+
+.fr-sec {
+  background: #0a1219;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px 6px;
 }
-.fr-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
-.fr-info b { font-size: 13px; }
-.fr-sub { font-size: 11.5px; color: var(--text-4); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fr-empty { font-size: 12.5px; color: var(--text-4); padding: 8px 2px; }
+.fr-t {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; font-weight: 700; color: var(--text-2);
+  letter-spacing: .02em; margin-bottom: 12px;
+  padding-bottom: 10px; border-bottom: 1px solid var(--line);
+}
+.fr-t::before {
+  content: ''; width: 3px; height: 13px; border-radius: 2px;
+  background: var(--accent); display: inline-block;
+}
+.fr-t span.count {
+  font-weight: 600; font-size: 11.5px; color: var(--text-4);
+  background: #0f1c27; border: 1px solid var(--line-2);
+  border-radius: 999px; padding: 1px 8px;
+}
+
+.fr-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 10px; border-radius: 11px;
+  transition: background .14s;
+  margin: 0 -4px 6px;
+}
+.fr-row:hover { background: #101c26; }
+.fr-row + .fr-row { border-top: 1px solid rgba(40,60,80,.35); border-radius: 0 0 11px 11px; }
+
+.fr-info { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 2px; }
+.fr-info b { font-size: 13.5px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.fr-info .post-uid { font-weight: 400; }
+.fr-sub { font-size: 11.5px; color: var(--text-4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 340px; }
+
+.fr-row .btn {
+  height: 30px; padding: 0 12px; font-size: 12px; border-radius: 8px; flex: none;
+}
+
+.fr-empty {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: var(--text-4);
+  padding: 10px 2px 16px;
+}
+.fr-empty::before { content: '·'; color: var(--line-2); }
+
+@media (max-width: 600px) {
+  .fr-sec { padding: 12px 12px 4px; }
+  .fr-sub { max-width: 150px; }
+  .fr-row { flex-wrap: wrap; }
+}
