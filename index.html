@@ -39,7 +39,7 @@
 </script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗼</text></svg>">
 <link rel="preload" href="fonts/inter-500.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=2026-11-26-11777-6375364-3nag">
+<link rel="stylesheet" href="style.css?v=2026-11-26-11777-6375364-3ner">
   <meta property="og:title" content="Steam 灯塔 · 找到没人注意到的那些游戏">
   <meta property="og:description" content="随机盲盒发现冷门佳作 + 多游戏加权相似检索（静态版，离线可跑）">
 </head>
@@ -107,9 +107,6 @@
   
 
   <span class="btn-soon" title="桌面客户端还在完善中，敬请期待">敬请期待</span>
-  <div class="status-chip" id="corpusPill" title="本地语料库规模">
-    <span class="dot"></span><span id="corpusText">载入中…</span>
-  </div>
 </header>
 
 <main>
@@ -342,6 +339,11 @@
     <span class="sep">·</span>
     <span>相似度 = Valve 官方标签权重 × IDF 余弦 + 交集收敛</span>
   </div>
+  <div class="foot-status">
+    <div class="status-chip" id="corpusPill" title="本地语料库规模">
+      <span class="dot"></span><span id="corpusText">载入中…</span>
+    </div>
+  </div>
   <a class="credit" href="https://github.com/OStonefishO" target="_blank" rel="noreferrer" title="OStonefishO">
     <img class="avatar" src="avatar.jpg" alt="OStonefishO" width="30" height="30">
     <span class="credit-text">make with <span class="heart">♥</span> love</span>
@@ -361,8 +363,8 @@
 
 <script src="config.js"></script>
   <script>window.LIGHTHOUSE_STATIC = true;</script>
-<script src="local-api.js?v=2026-11-26-11777-6375364-3nag"></script>
-<script src="app.js?v=2026-11-26-11777-6375364-3nag" type="module"></script>
+<script src="local-api.js?v=2026-11-26-11777-6375364-3ner"></script>
+<script src="app.js?v=2026-11-26-11777-6375364-3ner" type="module"></script>
 
 <script id="LH_BOOT_AUTH">
 // 独立绑定登录按钮：即使主程序还没就绪也能打开登录框

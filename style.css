@@ -663,6 +663,9 @@ textarea.input { resize: vertical; min-height: 96px; }
 }
 .foot-lines { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
 .foot .sep { opacity: 0.35; }
+/* 语料规模小标签：从顶栏挪到页脚 */
+.foot-status { display: flex; justify-content: center; }
+.foot-status .status-chip { margin-left: 0; }
 
 .credit {
   display: inline-flex; align-items: center; gap: 9px;
