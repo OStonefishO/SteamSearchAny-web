@@ -41,7 +41,36 @@ function avatarHtml(p, size = 40) {
 }
 
 /* ---------- REST ---------- */
-async function rest(path, opts = {}) {
+const AUTH_KEY = 'lh.auth';
+
+async function tryRefreshToken() {
+  let sess = null;
+  try { sess = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); } catch {}
+  if (!sess || !sess.refresh_token) return false;
+  const cfg = window.LIGHTHOUSE_SUPABASE || {};
+  try {
+    const r = await fetch(cfg.url + '/auth/v1/token?grant_type=refresh_token', {
+      method: 'POST',
+      headers: { apikey: cfg.anonKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: sess.refresh_token }),
+    });
+    if (!r.ok) return false;
+    const d = await r.json();
+    const next = {
+      access_token: d.access_token,
+      refresh_token: d.refresh_token,
+      expires_at: Date.now() + (d.expires_in || 3600) * 1000,
+      email: (d.user && d.user.email) || sess.email,
+      uid: d.user && d.user.id,
+    };
+    localStorage.setItem(AUTH_KEY, JSON.stringify(next));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function rest(path, opts = {}, retried = false) {
   const cfg = window.LIGHTHOUSE_SUPABASE || {};
   const s = session();
   const res = await fetch(cfg.url + path, {
@@ -56,7 +85,13 @@ async function rest(path, opts = {}) {
   });
   const txt = await res.text();
   const data = txt ? JSON.parse(txt) : null;
-  if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
+  if (res.status === 401 && !retried) {
+    const ok = await tryRefreshToken();
+    if (ok) return rest(path, opts, true);
+    localStorage.removeItem(AUTH_KEY);
+    throw new Error('登录已过期，请重新登录');
+  }
+  if (!res.ok) throw new Error((data && data.message) || 'HTTP ' + res.status);
   return data;
 }
 
@@ -480,7 +515,10 @@ async function renderList(root) {
     }
   }
 
-  root.querySelector('#pageInfo').textContent = `第 ${PAGE + 1} 页`;
+  const pager = root.querySelector('.pager');
+  const showPager = posts.length === size || PAGE > 0;
+  if (pager) pager.style.display = showPager ? 'flex' : 'none';
+  root.querySelector('#pageInfo').textContent = '第 ' + (PAGE + 1) + ' 页';
   root.querySelector('#prevPage').disabled = PAGE === 0;
   root.querySelector('#prevPage').onclick = () => { if (PAGE > 0) { PAGE -= 1; renderList(root); } };
   root.querySelector('#nextPage').disabled = posts.length < size;
