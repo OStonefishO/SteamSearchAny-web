@@ -875,6 +875,7 @@ async function renderDetail(root) {
       if (!v) return;
       try {
         await rest('/rest/v1/comments', { method: 'POST', body: [{ post_id: x.id, body: v, author_name: profile().name, author_email: currentEmail() }] });
+        notifyComment(x, v).catch(() => {});
         renderDetail(root);
       } catch (e) { toast('评论失败'); }
     };
@@ -1119,3 +1120,157 @@ function openCmtMenu(ev, name, root, inputEl) {
     close();
   };
 }
+
+
+/* ================= 通知 ================= */
+let NOTIFS = [];
+let notifOpen = false;
+
+async function loadNotifs() {
+  if (!currentEmail()) return [];
+  try {
+    NOTIFS = await rest('/rest/v1/notifications?select=id,kind,post_id,post_title,from_name,body,read,created_at&user_email=eq.' + encodeURIComponent(currentEmail()) + '&order=created_at.desc&limit=30') || [];
+  } catch (e) {
+    NOTIFS = [];
+  }
+  return NOTIFS;
+}
+
+function paintDot() {
+  const dot = document.getElementById('notifDot');
+  if (!dot) return;
+  const unread = NOTIFS.filter((n) => !n.read).length;
+  if (unread > 0) {
+    dot.classList.remove('hidden');
+    dot.textContent = unread > 9 ? '9+' : String(unread);
+  } else {
+    dot.classList.add('hidden');
+  }
+}
+
+export async function refreshNotifs() {
+  await loadNotifs();
+  paintDot();
+  if (notifOpen) renderNotifs();
+}
+
+function notifLine(n) {
+  const icon = n.kind === 'reply' ? '↩' : (n.kind === 'like' ? '👍' : '💬');
+  const unread = n.read ? '' : ' unread';
+  return '<div class="notif-item' + unread + '" data-nid="' + n.id + '" data-pid="' + (n.post_id || '') + '">' +
+    '<span class="notif-ic">' + icon + '</span>' +
+    '<div><div class="notif-t">' + esc(n.from_name || '有人') + ' ' + (n.kind === 'reply' ? '回复了你' : (n.kind === 'like' ? '赞了你的帖子' : '评论了你的帖子')) + '</div>' +
+    '<div class="notif-b">' + esc((n.body || '').slice(0, 46)) + '</div>' +
+    '<div class="notif-m">' + esc(n.post_title || '') + ' · ' + timeAgo(n.created_at) + '</div></div>' +
+    '</div>';
+}
+
+function renderNotifs() {
+  let panel = document.getElementById('notifPanel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'notifPanel';
+    panel.className = 'notif-panel';
+    document.body.appendChild(panel);
+  }
+  const unread = NOTIFS.filter((n) => !n.read).length;
+  panel.innerHTML = '<div class="notif-head"><b>通知</b>' +
+    '<span class="notif-actions">' + (unread ? '<button id="notifAll">全部已读</button>' : '') +
+    '<button id="notifClose">关闭</button></span></div>' +
+    '<div class="notif-list">' + (NOTIFS.length ? NOTIFS.map(notifLine).join('') : '<div class="notif-empty">还没有通知</div>') + '</div>';
+
+  const close = () => { notifOpen = false; panel.remove(); };
+  panel.querySelector('#notifClose').onclick = close;
+  const all = panel.querySelector('#notifAll');
+  if (all) all.onclick = async () => {
+    try {
+      await rest('/rest/v1/notifications?user_email=eq.' + encodeURIComponent(currentEmail()) + '&read=eq.false', { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: { read: true } });
+      await refreshNotifs();
+    } catch (e) { toast('操作失败'); }
+  };
+
+  panel.querySelectorAll('.notif-item').forEach((el) => {
+    el.onclick = async () => {
+      const nid = el.dataset.nid;
+      const pid = el.dataset.pid;
+      try {
+        await rest('/rest/v1/notifications?id=eq.' + nid, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: { read: true } });
+      } catch (e) {}
+      close();
+      if (pid) openPostById(pid);
+      refreshNotifs();
+    };
+  });
+}
+
+function toggleNotifPanel() {
+  if (notifOpen) {
+    const p = document.getElementById('notifPanel');
+    if (p) p.remove();
+    notifOpen = false;
+    return;
+  }
+  notifOpen = true;
+  renderNotifs();
+  refreshNotifs();
+}
+
+/** 打开某条帖子详情（自动切到社区 tab） */
+async function openPostById(pid) {
+  const tab = document.querySelector('.tab[data-view="community"]');
+  if (tab) tab.click();
+  await new Promise((r) => setTimeout(r, 150));
+  const root = document.getElementById('view-community') || document.querySelector('.view[data-view="community"]');
+  try {
+    const rows = await rest('/rest/v1/posts?select=id,title,game_id,game_name,body,images,author_name,author_id,author_avatar,author_email,created_at&id=eq.' + pid);
+    if (rows && rows[0] && root) {
+      CUR = rows[0];
+      VIEW = 'detail';
+      renderCommunity(root);
+    }
+  } catch (e) { toast('打开失败'); }
+}
+
+/** 评论/回复时给相关人发通知 */
+async function notifyComment(post, body) {
+  const me = currentEmail();
+  if (!me) return;
+  const rows = [];
+  const target = post.author_email;
+  if (target && target !== me) {
+    rows.push({ user_email: target, kind: 'comment', post_id: post.id, post_title: post.title || '无标题', from_name: profile().name, body });
+  }
+  const m = body.match(/^@(\S+)\s/);
+  if (m && m[1]) {
+    const replyTo = m[1];
+    try {
+      const ps = await rest('/rest/v1/profiles?select=user_email,name&name=eq.' + encodeURIComponent(replyTo) + '&limit=1');
+      const em = ps && ps[0] && ps[0].user_email;
+      if (em && em !== me && em !== target) {
+        rows.push({ user_email: em, kind: 'reply', post_id: post.id, post_title: post.title || '无标题', from_name: profile().name, body });
+      }
+    } catch (e) {}
+  }
+  if (!rows.length) return;
+  try {
+    await rest('/rest/v1/notifications', { method: 'POST', body: rows });
+  } catch (e) {}
+}
+
+/* 启动时绑定邮件按钮 + 首次拉取 */
+try {
+  const bindBtn = () => {
+    const b = document.getElementById('notifBtn');
+    if (!b) return false;
+    b.onclick = (ev) => { ev.stopPropagation(); toggleNotifPanel(); };
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#notifPanel') && !e.target.closest('#notifBtn')) {
+        const p = document.getElementById('notifPanel');
+        if (p) { p.remove(); notifOpen = false; }
+      }
+    });
+    return true;
+  };
+  if (!bindBtn()) setTimeout(bindBtn, 600);
+  setTimeout(() => { refreshNotifs().catch(() => {}); }, 1200);
+} catch (e) {}
