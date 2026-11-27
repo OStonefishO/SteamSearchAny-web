@@ -27,11 +27,11 @@ jobs:
       - name: 增量同步新游戏
         run: node tools/sync.mjs --limit=4000 --tags=40 --pages=3
 
-      - name: 补系统需求与截图（每轮一批）
-        run: node tools/fetch-extra.mjs --limit=1500
-
       - name: 抓 Steam 现场（特惠 / 新品 / 即将推出）
         run: node tools/fetch-events.mjs
+
+      - name: 补系统需求与截图（每轮一批）
+        run: node tools/fetch-extra.mjs --limit=1500
 
       - name: 提交并推送
         run: |
