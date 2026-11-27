@@ -44,7 +44,9 @@ async function call(path, { method = 'GET', body, headers = {} } = {}) {
 
 // ---------- 登录 ----------
 export async function sendCode(email) {
-  return call('/auth/v1/otp', { method: 'POST', body: { email, create_user: true } });
+  // 带上当前页面地址，邮件链接就会回到这里（而不是 Supabase 后台的 Site URL）
+  const back = encodeURIComponent(location.origin + location.pathname);
+  return call('/auth/v1/otp?redirect_to=' + back, { method: 'POST', body: { email, create_user: true } });
 }
 
 export async function verifyCode(email, token) {
