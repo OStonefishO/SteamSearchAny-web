@@ -1485,120 +1485,150 @@ export async function openFriends() {
   if (!m) return;
   if (!currentEmail()) return openLogin();
   m.hidden = false;
-  box.innerHTML = '<div class="m-body"><h3>好友</h3><div id="friendBody"><div class="empty-state"><span class="spin"></span></div></div></div>';
-  const body = box.querySelector('#friendBody');
   const me = currentEmail();
 
-  let incoming = [], outgoing = [], accepted = [];
-  try {
-    incoming = await rest('/rest/v1/' + FR + '?select=id,requester,created_at&target=eq.' + encodeURIComponent(me) + '&status=eq.pending') || [];
-    const acc0 = await rest('/rest/v1/' + FR + '?select=target&status=eq.accepted&requester=eq.' + encodeURIComponent(me)) || [];
-    const accSet = new Set((acc0 || []).map((r) => r.target));
-    outgoing = (await rest('/rest/v1/' + FR + '?select=id,target,created_at&requester=eq.' + encodeURIComponent(me) + '&status=eq.pending') || []).filter((r) => !accSet.has(r.target));
-    accepted = await rest('/rest/v1/' + FR + '?select=id,requester,target,status,remark,starred&status=eq.accepted&or=(requester.eq.' + encodeURIComponent(me) + ',target.eq.' + encodeURIComponent(me) + ')') || [];
-    accepted.sort((a, b) => (b.starred ? 1 : 0) - (a.starred ? 1 : 0));
-  } catch (e) {
-    body.innerHTML = '<div class="empty-state">读取失败：' + esc(e.message) + '<br><span style="font-size:12px;color:var(--text-4)">多半是 friendships 表还没建</span></div>';
-    return;
-  }
+  box.innerHTML = '<div class="m-body fr-wrap">' +
+    '<h3 class="fr-title">好友</h3>' +
 
-  const emails = Array.from(new Set([].concat(
-    incoming.map((x) => x.requester),
-    outgoing.map((x) => x.target),
-    accepted.map((x) => (x.requester === me ? x.target : x.requester))
-  )));
-  const profMap = {};
-  if (emails.length) {
-    try {
-      const ps = await rest('/rest/v1/profiles?select=user_email,name,avatar,uid,bio&user_email=in.(' + emails.map((e) => '"' + e + '"').join(',') + ')');
-      for (const p of ps || []) profMap[p.user_email] = p;
-    } catch (e) {}
-  }
-  const av = (email) => {
-    const p = profMap[email];
-    const img = p && p.avatar && p.avatar.startsWith('data:') ? p.avatar : '';
-    return avatarHtml({ avatar: (p && p.avatar && !img) ? p.avatar : '🎮', img }, 38);
+    '<section class="fr-card">' +
+      '<header class="fr-head"><span>好友列表</span><span class="fr-count" id="frFriendsCount">…</span></header>' +
+      '<div class="fr-scroll" id="frFriends"></div>' +
+    '</section>' +
+
+    '<section class="fr-card">' +
+      '<header class="fr-head"><span>好友申请</span><span class="fr-count" id="frReqCount">…</span></header>' +
+      '<div class="fr-scroll" id="frReqs"></div>' +
+    '</section>' +
+
+    '<section class="fr-card">' +
+      '<header class="fr-head"><span>加好友</span><span class="fr-hint">输入对方 UID</span></header>' +
+      '<div class="fr-add">' +
+        '<input class="input" id="frUid" inputmode="numeric" maxlength="10" placeholder="例如 8802317645">' +
+        '<button class="btn btn-primary" id="frAdd">发送申请</button>' +
+      '</div>' +
+      '<p class="fr-msg" id="frAddMsg"></p>' +
+    '</section>' +
+  '</div>';
+
+  const friendsEl = box.querySelector('#frFriends');
+  const reqsEl = box.querySelector('#frReqs');
+  const cntFriends = box.querySelector('#frFriendsCount');
+  const cntReqs = box.querySelector('#frReqCount');
+
+  const av = (email, p) => {
+    const img = String((p && p.avatar) || '');
+    return avatarHtml({ avatar: img.startsWith('data:') ? '🎮' : (img || '🎮'), img: img.startsWith('data:') ? img : '' }, 34);
   };
-  const nm = (email) => (profMap[email] && profMap[email].name) || email.split('@')[0];
-  const uidOf = (email) => (profMap[email] && profMap[email].uid) || '';
 
-  let html = '';
-  html += '<div class="fr-sec"><div class="fr-t">收到的申请 ' + (incoming.length ? '(' + incoming.length + ')' : '') + '</div>';
-  html += incoming.length
-    ? incoming.map((x) => '<div class="fr-row" data-rq="' + x.id + '" data-em="' + esc(x.requester) + '">' + av(x.requester) +
-        '<div class="fr-info"><b>' + esc(nm(x.requester)) + '<span class="post-uid">#' + esc(uidOf(x.requester) || '----') + '</span></b>' +
-        '<span class="fr-sub">' + timeAgo(x.created_at) + '</span></div>' +
-        '<button class="btn btn-sm btn-primary" data-accept="1">接受</button>' +
-        '<button class="btn btn-sm" data-reject="1">拒绝</button></div>').join('')
-    : '<div class="fr-empty">暂时没有人申请加你好友</div>';
-  html += '</div>';
+  const loadAll = async () => {
+    try {
+      const accepted = await rest('/rest/v1/' + FR + '?select=id,requester,target,remark,starred&status=eq.accepted&or=(requester.eq.' + encodeURIComponent(me) + ',target.eq.' + encodeURIComponent(me) + ')') || [];
+      accepted.sort((x, y) => (y.starred ? 1 : 0) - (x.starred ? 1 : 0));
+      const incoming = await rest('/rest/v1/' + FR + '?select=id,requester,created_at&target=eq.' + encodeURIComponent(me) + '&status=eq.pending') || [];
+      const outgoing = await rest('/rest/v1/' + FR + '?select=id,target,created_at&requester=eq.' + encodeURIComponent(me) + '&status=eq.pending') || [];
 
-  html += '<div class="fr-sec"><div class="fr-t">我的好友 ' + (accepted.length ? '(' + accepted.length + ')' : '') + '</div>';
-  html += accepted.length
-    ? accepted.map((x) => {
+      const emails = Array.from(new Set([].concat(
+        accepted.map((x) => (x.requester === me ? x.target : x.requester)),
+        incoming.map((x) => x.requester),
+        outgoing.map((x) => x.target)
+      )));
+      const pm = {};
+      if (emails.length) {
+        const ps = await rest('/rest/v1/profiles?select=user_email,name,avatar,uid,bio&user_email=in.(' + emails.map((e) => '"' + e + '"').join(',') + ')') || [];
+        for (const p of ps) pm[p.user_email] = p;
+      }
+      const nm = (e) => (pm[e] && pm[e].name) || e.split('@')[0];
+      const uidOf = (e) => (pm[e] && pm[e].uid) || '';
+
+      cntFriends.textContent = accepted.length;
+      cntReqs.textContent = incoming.length;
+
+      friendsEl.innerHTML = accepted.length ? accepted.map((x) => {
         const other = x.requester === me ? x.target : x.requester;
-        return '<div class="fr-row">' + av(other) +
-          '<div class="fr-info"><b>' + (x.starred ? '<span class="star">★</span>' : '') + esc(x.remark || nm(other)) +
-          '<span class="post-uid">#' + esc(uidOf(other) || '----') + '</span></b>' +
-          '<span class="fr-sub">' + esc((profMap[other] && profMap[other].bio) || '这个人懒得写简介') + '</span></div>' +
+        return '<div class="fr-item">' + av(other, pm[other]) +
+          '<div class="fr-info"><div class="fr-name">' + (x.starred ? '<i class="star">★</i>' : '') + esc(x.remark || nm(other)) +
+          '<span class="post-uid">#' + esc(uidOf(other) || '----') + '</span></div>' +
+          '<div class="fr-sub">' + esc((pm[other] && pm[other].bio) || '这个人懒得写简介') + '</div></div>' +
+          '<div class="fr-acts">' +
           '<button class="btn btn-sm btn-primary" data-chat="' + esc(other) + '" data-cname="' + esc(nm(other)) + '">聊天</button>' +
           '<button class="btn btn-sm" data-view="' + esc(other) + '">主页</button>' +
-          '<button class="btn btn-sm" data-manage="' + x.id + '" data-em="' + esc(other) + '" data-nm="' + esc(nm(other)) + '" data-rm="' + esc(x.remark || '') + '" data-star="' + (x.starred ? '1' : '') + '">管理</button></div>';
-      }).join('')
-    : '<div class="fr-empty">还没有好友，去帖子或主页里点「加为好友」</div>';
-  html += '</div>';
+          '<button class="btn btn-sm" data-manage="' + x.id + '" data-em="' + esc(other) + '" data-nm="' + esc(nm(other)) + '" data-rm="' + esc(x.remark || '') + '" data-star="' + (x.starred ? '1' : '') + '">管理</button>' +
+          '</div></div>';
+      }).join('') : '<div class="fr-empty">还没有好友，在下面输入对方 UID 添加</div>';
 
-  if (outgoing.length) {
-    html += '<div class="fr-sec"><div class="fr-t">发出的申请 (' + outgoing.length + ')</div>' +
-      outgoing.map((x) => '<div class="fr-row">' + av(x.target) +
-        '<div class="fr-info"><b>' + esc(nm(x.target)) + '</b><span class="fr-sub">等待对方同意</span></div>' +
-        '<button class="btn btn-sm" data-cancel="' + x.id + '">撤回</button></div>').join('') +
-      '</div>';
-  }
-  body.innerHTML = html;
+      reqsEl.innerHTML = (incoming.length || outgoing.length) ? [
+        incoming.map((x) => '<div class="fr-item" data-rq="' + x.id + '" data-em="' + esc(x.requester) + '">' + av(x.requester, pm[x.requester]) +
+          '<div class="fr-info"><div class="fr-name">' + esc(nm(x.requester)) + '<span class="post-uid">#' + esc(uidOf(x.requester) || '----') + '</span></div>' +
+          '<div class="fr-sub">请求加你好友 · ' + timeAgo(x.created_at) + '</div></div>' +
+          '<div class="fr-acts"><button class="btn btn-sm btn-primary" data-accept="1">同意</button>' +
+          '<button class="btn btn-sm" data-reject="1">拒绝</button></div></div>').join(''),
+        outgoing.map((x) => '<div class="fr-item">' + av(x.target, pm[x.target]) +
+          '<div class="fr-info"><div class="fr-name">' + esc(nm(x.target)) + '<span class="post-uid">#' + esc(uidOf(x.target) || '----') + '</span></div>' +
+          '<div class="fr-sub">等待对方同意</div></div>' +
+          '<div class="fr-acts"><button class="btn btn-sm" data-cancel="' + x.id + '">撤回</button></div></div>').join('')
+      ].join('') : '<div class="fr-empty">暂时没有申请</div>';
 
-  body.querySelectorAll('[data-accept]').forEach((b) => {
-    b.onclick = async () => {
-      const row = b.closest('[data-rq]');
-      try {
-        await rest('/rest/v1/' + FR + '?id=eq.' + row.dataset.rq, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: { status: 'accepted' } });
-        await rest('/rest/v1/notifications', { method: 'POST', body: [{ user_email: row.dataset.em, kind: 'friend', post_title: '好友申请', from_name: profile().name, body: '同意了你的好友申请' }] }).catch(() => {});
-        toast('已添加好友');
-        paintFriendDot();
-        openFriends();
-      } catch (e) { toast('失败：' + e.message); }
-    };
-  });
-  body.querySelectorAll('[data-reject]').forEach((b) => {
-    b.onclick = async () => {
-      const row = b.closest('[data-rq]');
-      try {
-        await rest('/rest/v1/' + FR + '?id=eq.' + row.dataset.rq, { method: 'DELETE' });
-        openFriends();
-      } catch (e) { toast('失败'); }
-    };
-  });
-  body.querySelectorAll('[data-cancel]').forEach((b) => {
-    b.onclick = async () => {
-      try {
-        await rest('/rest/v1/' + FR + '?id=eq.' + b.dataset.cancel, { method: 'DELETE' });
-        openFriends();
-      } catch (e) { toast('失败'); }
-    };
-  });
-  body.querySelectorAll('[data-manage]').forEach((b) => {
-    b.onclick = () => openFriendMenu(b, () => openFriends());
-  });
-  body.querySelectorAll('[data-chat]').forEach((b) => {
-    b.onclick = () => openChat(b.dataset.chat, b.dataset.cname);
-  });
-  body.querySelectorAll('[data-view]').forEach((b) => {
-    b.onclick = async () => {
-      const em = b.dataset.view;
-      const p = profMap[em];
-      openAuthor((p && p.name) || em, (p && p.uid) || null);
-    };
-  });
+      friendsEl.querySelectorAll('[data-chat]').forEach((b) => { b.onclick = () => openChat(b.dataset.chat, b.dataset.cname); });
+      friendsEl.querySelectorAll('[data-view]').forEach((b) => {
+        b.onclick = () => { const p = pm[b.dataset.view]; openAuthor((p && p.name) || b.dataset.view, (p && p.uid) || null); };
+      });
+      friendsEl.querySelectorAll('[data-manage]').forEach((b) => { b.onclick = () => openFriendMenu(b, () => openFriends()); });
+
+      reqsEl.querySelectorAll('[data-accept]').forEach((b) => {
+        b.onclick = async () => {
+          const row = b.closest('[data-rq]');
+          try {
+            await rest('/rest/v1/' + FR + '?id=eq.' + row.dataset.rq, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: { status: 'accepted' } });
+            await rest('/rest/v1/notifications', { method: 'POST', body: [{ user_email: row.dataset.em, kind: 'friend', post_title: '好友申请', from_name: profile().name, body: '同意了你的好友申请' }] }).catch(() => {});
+            toast('已添加好友');
+            paintFriendDot();
+            loadAll();
+          } catch (e) { toast('失败：' + e.message); }
+        };
+      });
+      reqsEl.querySelectorAll('[data-reject]').forEach((b) => {
+        b.onclick = async () => {
+          const row = b.closest('[data-rq]');
+          try { await rest('/rest/v1/' + FR + '?id=eq.' + row.dataset.rq, { method: 'DELETE' }); loadAll(); }
+          catch (e) { toast('失败'); }
+        };
+      });
+      reqsEl.querySelectorAll('[data-cancel]').forEach((b) => {
+        b.onclick = async () => {
+          try { await rest('/rest/v1/' + FR + '?id=eq.' + b.dataset.cancel, { method: 'DELETE' }); loadAll(); }
+          catch (e) { toast('失败'); }
+        };
+      });
+    } catch (e) {
+      friendsEl.innerHTML = '<div class="fr-empty">读取失败：' + esc(e.message) + '</div>';
+      reqsEl.innerHTML = '';
+    }
+  };
+
+  const addBtn = box.querySelector('#frAdd');
+  const msgEl = box.querySelector('#frAddMsg');
+  addBtn.onclick = async () => {
+    const uid = (box.querySelector('#frUid').value || '').trim();
+    if (!/^\d{10}$/.test(uid)) { msgEl.className = 'fr-msg err'; msgEl.textContent = 'UID 是 10 位数字'; return; }
+    msgEl.className = 'fr-msg';
+    msgEl.textContent = '查找中…';
+    try {
+      const ps = await rest('/rest/v1/profiles?select=user_email,name,uid&uid=eq.' + uid + '&limit=1');
+      const p = ps && ps[0];
+      if (!p) { msgEl.className = 'fr-msg err'; msgEl.textContent = '没有找到这个 UID'; return; }
+      if (p.user_email === me) { msgEl.className = 'fr-msg err'; msgEl.textContent = '不能加自己'; return; }
+      await sendFriendRequest(p.user_email, p.name);
+      msgEl.className = 'fr-msg ok';
+      msgEl.textContent = '已向 ' + (p.name || uid) + ' 发送申请';
+      box.querySelector('#frUid').value = '';
+      loadAll();
+    } catch (e) {
+      msgEl.className = 'fr-msg err';
+      msgEl.textContent = '失败：' + e.message;
+    }
+  };
+
+  loadAll();
 }
 
 /* 好友按钮绑定 */
