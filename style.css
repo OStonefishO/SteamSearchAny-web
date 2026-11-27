@@ -897,10 +897,6 @@ textarea.input { resize: vertical; min-height: 96px; }
 .react-lg .emo { font-size: 27px; }
 .react-lg b { font-size: 14px; }
 
-/* 卡片底部：互动条与提示同行，提示靠右不挤压 */
-.post-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
-.open-hint { margin-left: auto; font-size: 13.5px; color: var(--text-3); font-weight: 600; white-space: nowrap; }
-.post-clickable:hover .open-hint { color: var(--accent); }
 
 .float-emoji {
   position: fixed; transform: translate(-50%, 0); pointer-events: none;
@@ -991,4 +987,24 @@ textarea.input { resize: vertical; min-height: 96px; }
 .settings-btn { white-space: nowrap; }
 @media (max-width: 720px) {
   .ui-panel { width: min(320px, calc(100vw - 24px)); }
+}
+
+
+/* 互动条与详情提示：上下两行 */
+.post-foot {
+  display: flex; flex-direction: column; align-items: stretch;
+  gap: 6px; margin-top: 6px;
+}
+.react-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  width: 100%; min-width: 0;
+}
+.open-hint {
+  align-self: flex-end; margin-left: 0;
+  font-size: 13.5px; font-weight: 600; color: var(--text-4);
+  white-space: nowrap;
+}
+.post-clickable:hover .open-hint { color: var(--accent); }
+@media (max-width: 600px) {
+  .open-hint { font-size: 12px; white-space: normal; }
 }
