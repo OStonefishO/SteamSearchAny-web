@@ -1229,17 +1229,35 @@ async function loadNotifs() {
   return NOTIFS;
 }
 
-function paintDot() {
-  const dot = document.getElementById('notifDot');
-  if (!dot) return;
-  const unread = NOTIFS.filter((n) => !n.read).length;
-  if (unread > 0) {
-    dot.classList.remove('hidden');
-    dot.textContent = unread > 9 ? '9+' : String(unread);
-  } else {
-    dot.classList.add('hidden');
+function floatBadge(anchorId, count, cls) {
+  const anchor = document.getElementById(anchorId);
+  if (!anchor) return;
+  const id = 'floatBadge-' + anchorId;
+  let el = document.getElementById(id);
+  const show = count > 0;
+  if (!show) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('span');
+    el.id = id;
+    el.className = 'float-badge ' + (cls || '');
+    document.body.appendChild(el);
   }
+  const r = anchor.getBoundingClientRect();
+  el.textContent = count > 9 ? '9+' : String(count);
+  el.style.left = (r.right - 6) + 'px';
+  el.style.top = (r.top - 4) + 'px';
 }
+
+function paintDot() {
+  const unread = NOTIFS.filter((n) => !n.read).length;
+  floatBadge('notifBtn', unread);
+  // 旧的内嵌 dot 一律隐藏，避免重复
+  const dot = document.getElementById('notifDot');
+  if (dot) { dot.classList.add('hidden'); dot.textContent = ''; }
+}
+
+window.addEventListener('resize', () => { try { paintDot(); } catch (e) {} });
+window.addEventListener('scroll', () => { try { paintDot(); } catch (e) {} }, true);
 
 export async function refreshNotifs() {
   await loadNotifs();
@@ -1288,10 +1306,14 @@ function renderNotifs() {
       const pid = el.dataset.pid;
       try {
         await rest('/rest/v1/notifications?id=eq.' + nid, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: { read: true } });
+        const item = NOTIFS.find((n) => String(n.id) === String(nid));
+        if (item) item.read = true;
+        el.classList.remove('unread');
+        paintDot();
       } catch (e) {}
       close();
       if (pid) openPostById(pid);
-      refreshNotifs();
+      setTimeout(() => refreshNotifs().catch(() => {}), 400);
     };
   });
 }
@@ -1312,16 +1334,22 @@ function toggleNotifPanel() {
 async function openPostById(pid) {
   const tab = document.querySelector('.tab[data-view="community"]');
   if (tab) tab.click();
-  await new Promise((r) => setTimeout(r, 150));
-  const root = document.getElementById('view-community') || document.querySelector('.view[data-view="community"]');
+  await new Promise((r) => setTimeout(r, 180));
+  let root = document.getElementById('view-community');
+  if (!root) {
+    const all = Array.from(document.querySelectorAll('[id^="view-"]'));
+    root = all.find((el) => /community/.test(el.id)) || null;
+  }
   try {
     const rows = await rest('/rest/v1/posts?select=id,title,game_id,game_name,body,images,author_name,author_id,author_avatar,author_email,created_at&id=eq.' + pid);
     if (rows && rows[0] && root) {
       CUR = rows[0];
       VIEW = 'detail';
       renderCommunity(root);
+    } else {
+      toast('帖子可能已被删除');
     }
-  } catch (e) { toast('打开失败'); }
+  } catch (e) { toast('打开失败：' + e.message); }
 }
 
 /** 评论/回复时给相关人发通知 */
@@ -1441,15 +1469,10 @@ async function friendCount() {
 }
 
 async function paintFriendDot() {
-  const dot = document.getElementById('friendDot');
-  if (!dot) return;
   const c = await friendCount();
-  if (c.pending > 0) {
-    dot.classList.remove('hidden');
-    dot.textContent = c.pending > 9 ? '9+' : String(c.pending);
-  } else {
-    dot.classList.add('hidden');
-  }
+  floatBadge('friendsBtn', c.pending);
+  const dot = document.getElementById('friendDot');
+  if (dot) { dot.classList.add('hidden'); dot.textContent = ''; }
 }
 
 export async function openFriends() {

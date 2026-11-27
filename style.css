@@ -1114,3 +1114,14 @@ textarea.input { resize: vertical; min-height: 96px; }
   .chat-pic img { width: 90px; }
   .chat-emoji { grid-template-columns: repeat(6, 34px); }
 }
+
+
+/* body 级浮标（红点） */
+.float-badge {
+  position: fixed; z-index: 9800; transform: translate(0, 0);
+  min-width: 17px; height: 17px; line-height: 17px; padding: 0 4px;
+  border-radius: 9px; background: #f4736f; color: #fff;
+  font-size: 10px; font-weight: 700; text-align: center;
+  box-shadow: 0 0 0 2px #0b1118;
+  pointer-events: none;
+}
