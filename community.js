@@ -254,6 +254,24 @@ export function openLogin() {
     box.querySelector('#tabMail').onclick = () => { mailPane.classList.remove('hidden'); pwPane.classList.add('hidden'); };
     box.querySelector('#tabPw').onclick = () => { pwPane.classList.remove('hidden'); mailPane.classList.add('hidden'); };
 
+    const relayBtn = document.createElement('button');
+    relayBtn.className = 'btn btn-block';
+    relayBtn.style.marginTop = '16px';
+    relayBtn.textContent = '手机已登录？同步到这台电脑';
+    relayBtn.onclick = () => openRelayReceive();
+    pwPane.parentElement.appendChild(relayBtn);
+
+    const forgot = document.createElement('p');
+    forgot.style.cssText = 'font-size:12px;color:var(--text-4);margin-top:10px;cursor:pointer;text-align:right';
+    forgot.textContent = '忘记密码？';
+    forgot.onclick = async () => {
+      const em = box.querySelector('#pwEmail').value.trim();
+      if (!em) return (pwMsg.textContent = '先填邮箱');
+      try { await recoverPassword(em); pwMsg.textContent = '恢复邮件已发送，点邮件里的链接登录后重新设置密码'; }
+      catch (e) { pwMsg.textContent = '失败：' + e.message; }
+    };
+    pwPane.appendChild(forgot);
+
     const pwMsg = box.querySelector('#pwMsg');
     box.querySelector('#pwLogin').onclick = async () => {
       const em = box.querySelector('#pwEmail').value.trim();
@@ -343,6 +361,13 @@ export function openLogin() {
     refreshAuthButton();
     toast('资料已保存');
   };
+  const sendBtn = document.createElement('button');
+  sendBtn.className = 'btn btn-block';
+  sendBtn.style.marginTop = '14px';
+  sendBtn.textContent = '把这台设备的登录状态同步到电脑';
+  sendBtn.onclick = () => openRelaySend();
+  setPwBtn.parentElement.parentElement.insertBefore(sendBtn, setPwBtn.parentElement.nextSibling);
+
   const setPwBtn = box.querySelector('#setPwBtn');
   if (setPwBtn) setPwBtn.onclick = async () => {
     const pw = box.querySelector('#newPw').value;
@@ -775,4 +800,131 @@ async function renderDetail(root) {
   } catch (e) {
     cmtList.innerHTML = `<div class="cmt">评论读取失败：${esc(e.message)}</div>`;
   }
+}
+
+
+/* ================= 设备配对中转 ================= */
+const AUTH_SAVE = 'lh.auth';
+
+function randCode(n) {
+  const A = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+  let out = '';
+  const buf = new Uint8Array(n);
+  crypto.getRandomValues(buf);
+  for (let i = 0; i < n; i += 1) out += A[buf[i] % A.length];
+  return out;
+}
+function randSecret() {
+  const buf = new Uint8Array(16);
+  crypto.getRandomValues(buf);
+  return [...buf].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+async function deriveKey(code) {
+  const raw = new TextEncoder().encode('lh-relay|' + code);
+  const hash = await crypto.subtle.digest('SHA-256', raw);
+  return crypto.subtle.importKey('raw', hash, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = (s) => Uint8Array.from(atob(s), (ch) => ch.charCodeAt(0));
+
+async function encryptPayload(code, obj) {
+  const key = await deriveKey(code);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = new TextEncoder().encode(JSON.stringify(obj));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
+  return b64(iv) + '.' + b64(ct);
+}
+async function decryptPayload(code, payload) {
+  const [ivB64, ctB64] = String(payload).split('.');
+  const key = await deriveKey(code);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(ivB64) }, key, unb64(ctB64));
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
+/** 电脑端：生成配对码并等待手机送来会话 */
+export function openRelayReceive() {
+  const m = document.getElementById('modal');
+  const box = document.getElementById('modalContent');
+  if (!m) return;
+  m.hidden = false;
+  const code = randCode(6);
+  const secret = randSecret();
+  const expires = new Date(Date.now() + 120000).toISOString();
+
+  box.innerHTML = '<div class="m-body"><h3>手机 → 电脑</h3>' +
+    '<p style="color:var(--text-3);font-size:13px;margin:8px 0 12px">在<b>已登录的手机</b>上打开「我的账号 → 同步到电脑」，输入下面的配对码。</p>' +
+    '<div class="relay-code">' + code + '</div>' +
+    '<p id="relayMsg" style="font-size:12px;color:var(--text-4);margin-top:10px">等待中…（120 秒内有效）</p></div>';
+
+  const msg = box.querySelector('#relayMsg');
+  rest('/rest/v1/login_relay', {
+    method: 'POST',
+    headers: { Prefer: 'return=minimal' },
+    body: [{ code, secret, expires_at: expires }],
+  }).catch(() => { msg.textContent = '创建失败：请先在 Supabase 建 login_relay 表'; });
+
+  let stopped = false;
+  const t0 = Date.now();
+  const tick = async () => {
+    if (stopped) return;
+    if (Date.now() - t0 > 125000) { msg.textContent = '已超时，重新打开再来一次'; return; }
+    try {
+      const res = await rest('/rest/v1/rpc/relay_claim', { method: 'POST', body: { p_secret: secret } });
+      const payload = typeof res === 'string' ? res : (res && res.value);
+      if (payload) {
+        const sess = await decryptPayload(code, payload);
+        localStorage.setItem(AUTH_SAVE, JSON.stringify(sess));
+        stopped = true;
+        msg.textContent = '✓ 已接收，正在登录…';
+        setTimeout(() => location.reload(), 600);
+        return;
+      }
+    } catch {}
+    setTimeout(tick, 2000);
+  };
+  setTimeout(tick, 1500);
+}
+
+/** 手机端：把当前会话发到指定配对码 */
+export function openRelaySend() {
+  const m = document.getElementById('modal');
+  const box = document.getElementById('modalContent');
+  if (!m) return;
+  const s = session();
+  if (!s || !s.access_token) return openLogin();
+  m.hidden = false;
+  box.innerHTML = '<div class="m-body"><h3>同步到电脑</h3>' +
+    '<p style="color:var(--text-3);font-size:13px;margin:8px 0 12px">输入电脑上显示的 6 位配对码。</p>' +
+    '<input class="input" id="relayInput" maxlength="6" placeholder="A7K2M9" style="text-transform:uppercase;letter-spacing:4px;text-align:center;font-size:20px">' +
+    '<button class="btn btn-primary btn-block" id="relayGo" style="margin-top:10px">发送会话</button>' +
+    '<p id="relaySendMsg" style="font-size:12px;color:var(--text-4);margin-top:10px"></p></div>';
+
+  const msg = box.querySelector('#relaySendMsg');
+  box.querySelector('#relayGo').onclick = async () => {
+    const code = (box.querySelector('#relayInput').value || '').trim().toUpperCase();
+    if (code.length !== 6) return (msg.textContent = '配对码是 6 位');
+    msg.textContent = '发送中…';
+    try {
+      const payload = await encryptPayload(code, s);
+      await rest('/rest/v1/rpc/relay_post', { method: 'POST', body: { p_code: code, p_payload: payload } });
+      msg.textContent = '✓ 已发送，回电脑上看';
+    } catch (e) {
+      msg.textContent = '失败：' + e.message;
+    }
+  };
+}
+
+/** 忘记密码：发恢复邮件 */
+export async function recoverPassword(email) {
+  const cfg = window.LIGHTHOUSE_SUPABASE || {};
+  const res = await fetch(cfg.url + '/auth/v1/recover', {
+    method: 'POST',
+    headers: { apikey: cfg.anonKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.message || '发送失败');
+  }
+  return true;
 }
