@@ -1773,3 +1773,26 @@ function openFriendMenu(anchor, after) {
     }
   };
 }
+
+
+/* ================= 图片灯箱 ================= */
+function openLightbox(src) {
+  let box = document.getElementById('lightbox');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'lightbox';
+    box.className = 'lightbox';
+    box.innerHTML = '<img><span class="lb-close">×</span>';
+    document.body.appendChild(box);
+    box.onclick = () => box.remove();
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') box.remove(); });
+  }
+  box.querySelector('img').src = src;
+}
+
+document.addEventListener('dblclick', (e) => {
+  const img = e.target.closest('.chat-pic img, .detail-imgs img, .post .imgs img');
+  if (!img) return;
+  e.preventDefault();
+  openLightbox(img.src);
+});

@@ -1130,3 +1130,33 @@ textarea.input { resize: vertical; min-height: 96px; }
   .chat-pic img { width: 110px; }
   .chat-emoji { grid-template-columns: repeat(6, 36px); left: 14px; }
 }
+
+
+/* 聊天图片限制尺寸 + 灯箱 */
+.chat-pic img {
+  width: 150px !important; max-width: 150px !important;
+  max-height: 150px !important; height: auto;
+  object-fit: cover; border-radius: 10px;
+  cursor: zoom-in; border: 1px solid var(--line-2);
+}
+.chat-pic { flex-wrap: wrap; }
+
+.lightbox {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(3, 8, 13, 0.92);
+  display: grid; place-items: center; cursor: zoom-out;
+  animation: lbIn .18s ease-out;
+}
+.lightbox img {
+  max-width: 92vw; max-height: 90vh; border-radius: 12px;
+  box-shadow: 0 30px 80px -30px #000;
+}
+.lb-close {
+  position: absolute; top: 18px; right: 22px;
+  font-size: 28px; color: #dbe8f4; line-height: 1;
+}
+@keyframes lbIn { from { opacity: 0 } to { opacity: 1 } }
+
+@media (max-width: 700px) {
+  .chat-pic img { width: 120px !important; max-width: 120px !important; max-height: 120px !important; }
+}
