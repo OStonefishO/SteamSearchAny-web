@@ -1187,3 +1187,12 @@ textarea.input { resize: vertical; min-height: 96px; }
   .msg-pics img { width: 110px !important; max-width: 110px !important; max-height: 110px !important; }
   .chat-emoji { grid-template-columns: repeat(6, 36px); }
 }
+
+
+/* 待发送消息 */
+.msg.pending { opacity: .62; }
+.msg.pending .msg-time { color: var(--accent); }
+.msg.failed { opacity: 1; }
+.msg.failed .msg-time { color: #ff8f8a; cursor: pointer; }
+.msg.failed .msg-bubble { border-color: #7a2733; }
+.chat-send:disabled { opacity: .55; cursor: default; }

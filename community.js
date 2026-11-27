@@ -1717,19 +1717,61 @@ export function openChat(peerEmail, peerName) {
     }
   };
 
+  let sending = false;
+  const appendBubble = (body, pics) => {
+    const meP = profile();
+    const mineAv = avatarHtml({ avatar: meP.avatar, img: meP.img }, 30);
+    const row = document.createElement('div');
+    row.className = 'msg mine pending';
+    row.innerHTML = '<div class="msg-av">' + mineAv + '</div>' +
+      '<div class="msg-body">' +
+      '<div class="msg-who">' + esc(meP.name || '我') + '</div>' +
+      (body ? '<div class="msg-bubble">' + linkifyMentions(body) + '</div>' : '') +
+      (pics.length ? '<div class="msg-pics">' + pics.map((src) => '<img src="' + src + '">').join('') + '</div>' : '') +
+      '<div class="msg-time">发送中…</div>' +
+      '</div>';
+    list.appendChild(row);
+    list.scrollTop = list.scrollHeight;
+    return row;
+  };
+
   const send = async () => {
+    if (sending) return;                       // 防重复点击
     const input = box.querySelector('#chatInput');
+    const sendBtn = box.querySelector('#chatSend');
     const body = input.value.trim();
-    if (!body && !pending.length) return;
+    const pics = pending.slice();
+    if (!body && !pics.length) return;
+
+    sending = true;
+    sendBtn.disabled = true;
+    sendBtn.textContent = '…';
+
+    // 先上屏（用户立刻看到）
+    input.value = '';
+    pending = [];
+    renderImgs();
+    const row = appendBubble(body, pics);
+
     try {
-      await rest('/rest/v1/messages', { method: 'POST', body: [{ sender: me, receiver: peerEmail, body: body || '', images: pending.slice() }] });
-      input.value = '';
-      pending = [];
-      renderImgs();
+      await rest('/rest/v1/messages', {
+        method: 'POST',
+        body: [{ sender: me, receiver: peerEmail, body: body || '', images: pics }],
+      });
+      row.classList.remove('pending');
       lastCount = -1;
-      load();
+      await load();
     } catch (e) {
+      row.classList.add('failed');
+      const t = row.querySelector('.msg-time');
+      if (t) t.textContent = '发送失败，点此重试';
+      row.onclick = () => { row.remove(); input.value = body; pending = pics; renderImgs(); };
       toast('发送失败：' + e.message);
+    } finally {
+      sending = false;
+      sendBtn.disabled = false;
+      sendBtn.textContent = '发送';
+      input.focus();
     }
   };
 
