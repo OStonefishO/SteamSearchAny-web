@@ -1196,3 +1196,27 @@ textarea.input { resize: vertical; min-height: 96px; }
 .msg.failed .msg-time { color: #ff8f8a; cursor: pointer; }
 .msg.failed .msg-bubble { border-color: #7a2733; }
 .chat-send:disabled { opacity: .55; cursor: default; }
+
+
+/* 聊天模式：外层容器加宽，避免被 760px 裁掉右侧 */
+.modal-body:has(.chat-mode) {
+  width: min(940px, 96vw) !important;
+  max-width: min(940px, 96vw) !important;
+  max-height: 92vh;
+  overflow: hidden !important;
+  padding: 0;
+  background: #080f16;
+}
+.modal-body:has(.chat-mode) .modal-close { display: none; }
+#modalContent.chat-mode {
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: 0;
+}
+.chat-body { width: 100%; }
+.chat-list { width: 100%; }
+.msg { max-width: min(78%, 620px); }
+@media (max-width: 700px) {
+  .modal-body:has(.chat-mode) { width: 96vw !important; max-width: 96vw !important; }
+  .msg { max-width: 92%; }
+}

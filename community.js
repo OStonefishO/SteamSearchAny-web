@@ -1656,6 +1656,11 @@ export function openChat(peerEmail, peerName) {
     '</div>';
 
   const list = box.querySelector('#chatList');
+  const scrollToBottom = () => {
+    list.scrollTop = list.scrollHeight;
+    requestAnimationFrame(() => { list.scrollTop = list.scrollHeight; });
+    setTimeout(() => { list.scrollTop = list.scrollHeight; }, 120);
+  };
   const imgsWrap = box.querySelector('#chatImgs');
 
   const renderImgs = () => {
@@ -1711,7 +1716,7 @@ export function openChat(peerEmail, peerName) {
             '<div class="msg-time">' + timeAgo(r.created_at) + '</div>' +
           '</div></div>';
       }).join('') : '<div class="chat-empty">还没有消息，打个招呼吧 👋</div>';
-      list.scrollTop = list.scrollHeight;
+      scrollToBottom();
     } catch (e) {
       list.innerHTML = '<div class="chat-empty">读取失败：' + esc(e.message) + '<br><span style="font-size:12px;opacity:.7">多半是 messages 表还没建</span></div>';
     }
@@ -1735,6 +1740,7 @@ export function openChat(peerEmail, peerName) {
     return row;
   };
 
+  list.addEventListener('load', scrollToBottom, true);
   const send = async () => {
     if (sending) return;                       // 防重复点击
     const input = box.querySelector('#chatInput');
