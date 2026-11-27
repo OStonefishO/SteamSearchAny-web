@@ -3186,19 +3186,14 @@ export function openChat(peerEmail, peerName) {
     '</div>';
 
   const list = box.querySelector('#chatList');
-  // 只有"贴着底部"时才自动滚到最新；上滑看历史时不要抢滚动位置
-  let stick = true;
-  list.addEventListener('scroll', () => {
-    const gap = list.scrollHeight - list.scrollTop - list.clientHeight;
-    stick = gap < 80;
-  }, { passive: true });
-
+  // 只在"已经贴着底部"时才自动滚到最新；上滑看历史时一律不抢滚动位置。
+  // 用实时几何判断而不是缓存滚动事件，headless / 移动端惯性滚动都更可靠。
+  const atBottom = () => list.scrollHeight - list.scrollTop - list.clientHeight < 80;
   const scrollToBottom = (force = false) => {
-    if (!force && !stick) return;
-    stick = true;
+    if (!force && !atBottom()) return;
     list.scrollTop = list.scrollHeight;
-    requestAnimationFrame(() => { if (force || stick) list.scrollTop = list.scrollHeight; });
-    setTimeout(() => { if (force || stick) list.scrollTop = list.scrollHeight; }, 120);
+    requestAnimationFrame(() => { list.scrollTop = list.scrollHeight; });
+    setTimeout(() => { list.scrollTop = list.scrollHeight; }, 120);
   };
   const imgsWrap = box.querySelector('#chatImgs');
 
@@ -3250,6 +3245,7 @@ export function openChat(peerEmail, peerName) {
       const peerLabel = (peerProf && peerProf.name) || peerName || '对方';
 
       const prevTop = list.scrollTop;   // 重排前记一下位置：上滑看历史时别把人拽走
+      const wasAtBottom = atBottom();
       list.innerHTML = rows.length ? rows.map((r) => {
         const mine = r.sender === me;
         const imgs = Array.isArray(r.images) ? r.images : [];
@@ -3263,7 +3259,7 @@ export function openChat(peerEmail, peerName) {
             '<div class="msg-time">' + timeAgo(r.created_at) + '</div>' +
           '</div></div>';
       }).join('') : '<div class="chat-empty">还没有消息，打个招呼吧 👋</div>';
-      if (stick) scrollToBottom();
+      if (wasAtBottom) scrollToBottom(true);
       else list.scrollTop = prevTop;
     } catch (e) {
       list.innerHTML = '<div class="chat-empty">读取失败：' + esc(e.message) + '<br><span style="font-size:12px;opacity:.7">多半是 messages 表还没建</span></div>';
@@ -3284,7 +3280,6 @@ export function openChat(peerEmail, peerName) {
       '<div class="msg-time">发送中…</div>' +
       '</div>';
     list.appendChild(row);
-    stick = true;
     list.scrollTop = list.scrollHeight;
     return row;
   };
