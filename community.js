@@ -18,7 +18,12 @@ export function profile() {
   let p = {};
   try { p = JSON.parse(localStorage.getItem(PK) || '{}'); } catch {}
   const email = currentEmail() || '';
-  return { name: p.name || (email ? email.split('@')[0] : ''), avatar: p.avatar || '🎮', img: p.img || '', color: p.color || '#45bdf7' };
+  let id = p.id;
+  if (!id) {
+    id = 1000000000 + Math.floor(Math.random() * 9000000000);
+    try { p.id = id; localStorage.setItem(PK, JSON.stringify(p)); } catch {}
+  }
+  return { id, name: p.name || (email ? email.split('@')[0] : ''), avatar: p.avatar || '🎮', img: p.img || '', color: p.color || '#45bdf7' };
 }
 function saveProfile(p) { try { localStorage.setItem(PK, JSON.stringify(p)); } catch {} }
 
@@ -151,7 +156,7 @@ export function openLogin() {
       <span id="avatarPreview">${avatarHtml(p, 56)}</span>
       <div>
         <div class="profile-name">${esc(p.name)}</div>
-        <div class="profile-mail">${esc(email)}</div>
+        <div class="profile-mail">${esc(email)} · UID #${p.id}</div>
       </div>
     </div>
 
@@ -261,7 +266,7 @@ export async function openComposer(game) {
         headers: { Prefer: 'return=representation' },
         body: [{
           title, game_id: game ? game.id : 0, game_name: gname, body,
-          author_name: p.name, author_avatar: p.img || p.avatar, author_email: currentEmail(),
+          author_name: p.name, author_id: p.id, author_avatar: p.img || p.avatar, author_email: currentEmail(),
         }],
       });
       m.hidden = true;
@@ -274,18 +279,19 @@ export async function openComposer(game) {
 }
 
 /* ---------- 某位用户的资料页 ---------- */
-export async function openAuthor(name) {
+export async function openAuthor(name, uid) {
   const m = document.getElementById('modal');
   const box = document.getElementById('modalContent');
   if (!m) return;
   m.hidden = false;
   box.innerHTML = `<div class="m-body"><h3>${esc(name)}</h3><p style="color:var(--text-4);font-size:12px">读取中…</p></div>`;
   try {
-    const rows = await rest(`/rest/v1/posts?select=id,title,game_name,body,author_avatar,created_at&author_name=eq.${encodeURIComponent(name)}&order=created_at.desc&limit=20`);
+    const filter = uid ? `author_id=eq.${uid}` : `author_name=eq.${encodeURIComponent(name)}`;
+    const rows = await rest(`/rest/v1/posts?select=id,title,game_name,body,author_avatar,author_id,created_at&` + filter + `&order=created_at.desc&limit=20`);
     const p0 = { name, avatar: rows[0]?.author_avatar || '🎮', img: (rows[0]?.author_avatar || '').startsWith('data:') ? rows[0].author_avatar : '', color: '#45bdf7' };
     box.innerHTML = `<div class="m-body">
       <div class="profile-head">${avatarHtml(p0, 56)}
-        <div><div class="profile-name">${esc(name)}</div>
+        <div><div class="profile-name">${esc(name)}<span class="post-uid">#${uid || (rows[0] && rows[0].author_id) || '----'}</span></div>
         <div class="profile-mail">${rows.length} 篇帖子</div></div>
       </div>
       ${rows.map((x) => `<div class="author-post"><b>${esc(x.title || '无标题')}</b>
@@ -317,7 +323,7 @@ export async function renderCommunity(root) {
   const list = root.querySelector('#postList');
   let posts = [];
   try {
-    posts = await rest('/rest/v1/posts?select=id,title,game_id,game_name,body,author_name,author_avatar,author_email,created_at&order=created_at.desc&limit=30') || [];
+    posts = await rest('/rest/v1/posts?select=id,title,game_id,game_name,body,author_name,author_id,author_avatar,author_email,created_at&order=created_at.desc&limit=30') || [];
   } catch (e) {
     list.innerHTML = `<div class="empty-state">读取失败：${esc(e.message)}</div>`;
     return;
@@ -341,7 +347,7 @@ export async function renderCommunity(root) {
     return `<article class="post">
       <header>
         ${avatarHtml(av, 26)}
-        <a class="post-author" data-author="${esc(x.author_name)}">${esc(x.author_name)}</a>
+        <a class="post-author" data-author="${esc(x.author_name)}" data-aid="${x.author_id || ''}">${esc(x.author_name)}<span class="post-uid">#${x.author_id || '----'}</span></a>
         ${x.game_id ? `<a class="post-game" href="?info=${x.game_id}">${esc(x.game_name)}</a>` : `<span class="post-game">${esc(x.game_name)}</span>`}
         <span class="post-meta">${timeAgo(x.created_at)}</span>
         ${mine ? `<button class="post-del" data-del="${x.id}">删除</button>` : ''}
@@ -358,7 +364,7 @@ export async function renderCommunity(root) {
     </article>`;
   }).join('');
 
-  list.querySelectorAll('[data-author]').forEach((a) => { a.onclick = () => openAuthor(a.dataset.author); });
+  list.querySelectorAll('[data-author]').forEach((a) => { a.onclick = () => openAuthor(a.dataset.author, a.dataset.aid); });
   list.querySelectorAll('[data-del]').forEach((b) => {
     b.onclick = async () => {
       if (!confirm('删除这条帖子？')) return;
