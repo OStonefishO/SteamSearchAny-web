@@ -735,7 +735,11 @@ export async function openAuthor(name, uid) {
   const priv = await loadPrivacy(target);
   const favIds = priv.showFavs && target ? await loadUserFavs(target) : [];
   const gallery = priv.showGallery ? collectImages(posts) : [];
-  const wall = priv.allowWall && target ? await loadWall(target) : [];
+  const likeInfo = target ? await loadProfileLikes(target) : { count: 0, mine: false };
+  const myBlocks = await loadBlocks();
+  let blockedByMe = !!target && myBlocks.includes(target);
+  const wallRaw = priv.allowWall && target ? await loadWall(target) : [];
+  const wall = wallRaw.filter((w) => !myBlocks.includes(w.author_email));
 
   box.innerHTML = `<div class="m-body">
     <div class="author-hero">
@@ -745,13 +749,18 @@ export async function openAuthor(name, uid) {
           <div class="author-name">${esc(name)}<span class="post-uid">#${uidShown || '----'}</span></div>
           <p class="author-bio-line">${esc(bioText)}</p>
         </div>
-        <div class="author-actions" id="friendSlot"></div>
+        <div class="author-actions">
+          <button class="btn btn-sm" id="authorLike" type="button">♥ 0</button>
+          <button class="btn btn-sm" id="authorBlock" type="button">拉黑</button>
+          <span id="friendSlot"></span>
+        </div>
       </div>
       <div class="author-stats">
         <div class="author-stat"><b>${posts.length}</b><span>帖子</span></div>
         <div class="author-stat"><b>${priv.showFavs ? favIds.length : '—'}</b><span>收藏</span></div>
         <div class="author-stat"><b>${priv.showGallery ? gallery.length : '—'}</b><span>图片</span></div>
         <div class="author-stat"><b>${priv.allowWall ? wall.length : '—'}</b><span>留言</span></div>
+        <div class="author-stat"><b>${likeInfo.count}</b><span>主页赞</span></div>
       </div>
     </div>
 
@@ -798,6 +807,7 @@ export async function openAuthor(name, uid) {
           });
           input.value = '';
           toast('留言成功');
+          pushNotif({ user_email: target, kind: 'wall', post_title: '主页留言', from_name: p.name || me, body });
           paintWall(await loadWall(target));
         } catch (e) {
           toast('留言失败：' + e.message);
@@ -863,6 +873,59 @@ export async function openAuthor(name, uid) {
     if (t) paint(t.dataset.atab);
   };
   paint('posts');
+
+  // 点赞主页 / 拉黑
+  const likeBtn = box.querySelector('#authorLike');
+  if (likeBtn) {
+    const paintLike = (info) => {
+      likeBtn.textContent = (info.mine ? '❤ ' : '♥ ') + info.count;
+      likeBtn.classList.toggle('on', info.mine);
+    };
+    paintLike(likeInfo);
+    likeBtn.onclick = async () => {
+      if (!me) return openLogin();
+      if (me === target) return toast('不能给自己点赞');
+      likeBtn.disabled = true;
+      try {
+        const next = !likeInfo.mine;
+        await setProfileLike(target, next);
+        const fresh = await loadProfileLikes(target);
+        likeInfo.mine = fresh.mine;
+        likeInfo.count = fresh.count;
+        paintLike(likeInfo);
+      } catch (e) {
+        toast('操作失败：' + e.message);
+      } finally {
+        likeBtn.disabled = false;
+      }
+    };
+  }
+  const blockBtn = box.querySelector('#authorBlock');
+  if (blockBtn) {
+    const paintBlock = (on) => {
+      blockBtn.textContent = on ? '已拉黑' : '拉黑';
+      blockBtn.classList.toggle('on', on);
+    };
+    paintBlock(blockedByMe);
+    blockBtn.onclick = async () => {
+      if (!me) return openLogin();
+      if (me === target) return toast('不能拉黑自己');
+      const nowBlocked = !blockedByMe;
+      if (nowBlocked && !confirm('拉黑后，对方在你主页的留言会隐藏，你也看不到 TA 的动态。继续？')) return;
+      blockBtn.disabled = true;
+      try {
+        if (nowBlocked) await blockUser(target);
+        else await unblockUser(target);
+        blockedByMe = nowBlocked;
+        paintBlock(nowBlocked);
+        toast(nowBlocked ? '已拉黑' : '已解除拉黑');
+      } catch (e) {
+        toast('操作失败：' + e.message);
+      } finally {
+        blockBtn.disabled = false;
+      }
+    };
+  }
 
   // 好友按钮
   const slot = box.querySelector('#friendSlot');
@@ -945,6 +1008,68 @@ async function loadWall(email) {
   } catch {
     return [];
   }
+}
+
+/* ---------- 主页点赞 / 黑名单 / 通知 ---------- */
+function pushNotif(row) {
+  if (!row || !row.user_email) return;
+  const me = currentEmail();
+  if (me && row.user_email === me) return; // 自己动自己不用通知
+  rest('/rest/v1/notifications', { method: 'POST', body: [row] }).catch(() => {});
+}
+
+async function loadProfileLikes(email) {
+  if (!email) return { count: 0, mine: false };
+  try {
+    const rows = await rest('/rest/v1/profile_likes?select=liker_email&owner_email=eq.' + encodeURIComponent(email)) || [];
+    const me = currentEmail();
+    return { count: rows.length, mine: !!me && rows.some((r) => r.liker_email === me) };
+  } catch {
+    return { count: 0, mine: false };
+  }
+}
+
+async function setProfileLike(target, on) {
+  const me = currentEmail();
+  if (!me || !target) return false;
+  if (on) {
+    await rest('/rest/v1/profile_likes', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
+      body: [{ owner_email: target, liker_email: me }],
+    });
+    pushNotif({ user_email: target, kind: 'plike', post_title: '主页被赞', from_name: profile().name || me, body: '赞了你的主页' });
+  } else {
+    await rest('/rest/v1/profile_likes?owner_email=eq.' + encodeURIComponent(target) + '&liker_email=eq.' + encodeURIComponent(me), { method: 'DELETE' });
+  }
+  return true;
+}
+
+async function loadBlocks() {
+  const me = currentEmail();
+  if (!me) return [];
+  try {
+    const rows = await rest('/rest/v1/blocks?select=blocked_email&owner_email=eq.' + encodeURIComponent(me)) || [];
+    return rows.map((r) => r.blocked_email);
+  } catch {
+    return [];
+  }
+}
+
+async function blockUser(email) {
+  const me = currentEmail();
+  if (!me || !email) return;
+  await rest('/rest/v1/blocks', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
+    body: [{ owner_email: me, blocked_email: email }],
+  });
+}
+
+async function unblockUser(email) {
+  const me = currentEmail();
+  if (!me || !email) return;
+  await rest('/rest/v1/blocks?owner_email=eq.' + encodeURIComponent(me) + '&blocked_email=eq.' + encodeURIComponent(email), { method: 'DELETE' });
 }
 
 /** 按 id 批量取游戏（本地语料的 /api/byids） */
@@ -1041,12 +1166,15 @@ export async function renderMe(root) {
       '<div class="me-stats">' +
         '<button class="me-stat" data-mtab="fav"><b id="meFavN">' + favIdList().length + '</b><span>收藏</span></button>' +
         '<button class="me-stat" data-mtab="posts"><b id="mePostN">—</b><span>我的帖子</span></button>' +
+        '<button class="me-stat" data-mtab="wall"><b id="meWallN">—</b><span>留言</span></button>' +
+        '<div class="me-stat ghost"><b id="meLikeN">—</b><span>主页赞</span></div>' +
         '<div class="me-stat ghost"><b>' + (mail ? '#' + me0.id : '—') + '</b><span>UID</span></div>' +
       '</div>' +
     '</section>' +
     '<nav class="me-tabs">' +
       '<button class="me-tab" data-mtab="fav">收藏夹 <i id="meFavC">' + favIdList().length + '</i></button>' +
       '<button class="me-tab" data-mtab="posts">我的帖子 <i id="mePostC">' + (postRows ? postRows.length : 0) + '</i></button>' +
+      '<button class="me-tab" data-mtab="wall">留言 <i id="meWallC">0</i></button>' +
       '<button class="me-tab" data-mtab="priv">隐私设置</button>' +
       '<span class="me-tab-hint">以后的新功能也会长在这里</span>' +
     '</nav>' +
@@ -1214,17 +1342,67 @@ export async function renderMe(root) {
     };
   };
 
+  const paintMyWall = async () => {
+    if (!alive) return;
+    const em = currentEmail();
+    if (!em) {
+      pane.innerHTML = '<div class="me-empty"><span class="big">💬</span>登录后才能看到别人给你的留言<br><br>' +
+        '<button class="btn btn-primary btn-sm" id="meLogin4">去登录</button></div>';
+      const b = pane.querySelector('#meLogin4');
+      if (b) b.onclick = () => openLogin();
+      return;
+    }
+    pane.innerHTML = '<div class="empty-state"><span class="spin"></span>读取留言…</div>';
+    const rows = await loadWall(em);
+    const likes = await loadProfileLikes(em);
+    if (!alive) return;
+    const setN = (id, v) => {
+      const el = root.querySelector('#' + id);
+      if (el) el.textContent = String(v);
+    };
+    setN('meWallN', rows.length);
+    setN('meWallC', rows.length);
+    setN('meLikeN', likes.count);
+    if (!rows.length) {
+      pane.innerHTML = '<div class="me-empty"><span class="big">💬</span>还没有人给你留言<br><span>别人点开你的主页 → 留言板 就能留言，这里会收到通知</span></div>';
+      return;
+    }
+    pane.innerHTML = '<div class="wall-list">' + rows.map((w) => `
+      <div class="wall-item">
+        ${avatarHtml({ avatar: String(w.author_avatar || '🎮').startsWith('data:') ? '🎮' : (w.author_avatar || '🎮'), img: String(w.author_avatar || '').startsWith('data:') ? w.author_avatar : '' }, 32)}
+        <div class="wall-main">
+          <div class="wall-top"><b>${esc(w.author_name || w.author_email || '某人')}</b><span class="post-meta">${timeAgo(w.created_at)}</span></div>
+          <p class="wall-body">${esc(w.body)}</p>
+        </div>
+        <button class="wall-del" data-wdel2="${w.id}" title="删除">×</button>
+      </div>`).join('') + '</div>' +
+      '<p class="me-foot">共 ' + rows.length + ' 条留言 · 主页赞 ' + likes.count + ' 个</p>';
+    pane.querySelectorAll('[data-wdel2]').forEach((b) => {
+      b.onclick = async () => {
+        if (!confirm('删除这条留言？')) return;
+        try {
+          await rest('/rest/v1/wall_messages?id=eq.' + b.dataset.wdel2, { method: 'DELETE' });
+          toast('已删除');
+          paintMyWall();
+        } catch (e) {
+          toast('删除失败：' + e.message);
+        }
+      };
+    });
+  };
+
   const paint = async (force) => {
     setTabBtns();
     localStorage.setItem(ME_TAB_KEY, tab);
     if (tab === 'priv') await paintPrivacy();
     else if (tab === 'fav') await paintFavs(force);
+    else if (tab === 'wall') await paintMyWall();
     else await paintPosts(force);
   };
 
   root.querySelectorAll('[data-mtab]').forEach((b) => {
     b.onclick = () => {
-      tab = ['posts', 'priv'].includes(b.dataset.mtab) ? b.dataset.mtab : 'fav';
+      tab = ['posts', 'priv', 'wall'].includes(b.dataset.mtab) ? b.dataset.mtab : 'fav';
       paint();
     };
   });
@@ -1553,7 +1731,7 @@ async function renderDetail(root) {
     (imgs.length ? '<div class="detail-imgs">' + imgs.map((src) => mediaHtml(src)).join('') + '</div>' : '') +
     '<div class="post-foot" id="reactSlot"></div>' +
     '<div id="cmtList" class="post-comments"></div>' +
-    '<div class="cmt-add"><input class="input sm" id="cmtInput" placeholder="评论两句…"><button class="btn btn-sm" id="cmtSend">发送</button></div>' +
+    '<div class="cmt-add"><textarea class="input sm cmt-input" id="cmtInput" rows="1" placeholder="评论两句…（回车换行，Ctrl/⌘+回车发送）"></textarea><button class="btn btn-sm" id="cmtSend">发送</button></div>' +
     '</article>';
 
   root.querySelector('#backBtn').onclick = () => { VIEW = 'list'; CUR = null; renderCommunity(root); };
@@ -1608,7 +1786,7 @@ async function renderDetail(root) {
       return '<div class="cmt" data-cid="' + cm.id + '"' + (canDelC ? ' data-mine="1"' : '') + '>' +
         '<b class="cmt-author" data-name="' + esc(cm.author_name) + '" data-uid="' + (cm.author_id || uidByEmail[cm.author_email] || '') + '">' + esc(cm.author_name) +
         (cm.author_id || uidByEmail[cm.author_email] ? '<span class="post-uid">#' + (cm.author_id || uidByEmail[cm.author_email]) + '</span>' : '') + '</b> ' +
-        linkifyMentions(cm.body) +
+        '<span class="cmt-body">' + linkifyMentions(cm.body) + '</span>' +
         '<span class="cmt-time">' + timeAgo(cm.created_at) + '</span>' +
         '</div>';
     }).join('') || '<div class="cmt" style="color:var(--text-4)">还没有评论</div>';
@@ -1639,8 +1817,7 @@ async function renderDetail(root) {
     root.querySelector('#cmtSend').onclick = async () => {
       if (!currentEmail()) return openLogin();
       const v = root.querySelector('#cmtInput').value.trim();
-      if (!v) return;
-      try {
+      if (!v) return;      try {
         try {
           await rest('/rest/v1/comments', { method: 'POST', body: [{ post_id: x.id, body: v, author_name: profile().name, author_id: profile().id, author_email: currentEmail() }] });
         } catch (err1) {
@@ -1650,6 +1827,23 @@ async function renderDetail(root) {
         renderDetail(root);
       } catch (e) { toast('评论失败'); }
     };
+
+    // 评论框：回车换行（textarea 默认行为），Ctrl/⌘+回车发送，输入时自动长高
+    const cmtBox = root.querySelector('#cmtInput');
+    if (cmtBox) {
+      const grow = () => {
+        cmtBox.style.height = 'auto';
+        cmtBox.style.height = Math.min(cmtBox.scrollHeight, 132) + 'px';
+      };
+      cmtBox.addEventListener('input', grow);
+      cmtBox.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
+          ev.preventDefault();
+          root.querySelector('#cmtSend').click();
+        }
+      });
+      grow();
+    }
   } catch (e) {
     cmtList.innerHTML = '<div class="cmt">评论读取失败：' + esc(e.message) + '</div>';
   }
@@ -1948,12 +2142,21 @@ export async function refreshNotifs() {
   if (notifOpen) renderNotifs();
 }
 
+const NOTIF_KINDS = {
+  reply: { icon: '↩', text: '回复了你' },
+  like: { icon: '👍', text: '赞了你的帖子' },
+  wall: { icon: '💬', text: '给你的主页留言了' },
+  plike: { icon: '❤️', text: '赞了你的主页' },
+  friend: { icon: '👥', text: '加你为好友' },
+  comment: { icon: '💬', text: '评论了你的帖子' },
+};
+
 function notifLine(n) {
-  const icon = n.kind === 'reply' ? '↩' : (n.kind === 'like' ? '👍' : '💬');
+  const k = NOTIF_KINDS[n.kind] || { icon: '🔔', text: '和你互动了' };
   const unread = n.read ? '' : ' unread';
   return '<div class="notif-item' + unread + '" data-nid="' + n.id + '" data-pid="' + (n.post_id || '') + '">' +
-    '<span class="notif-ic">' + icon + '</span>' +
-    '<div><div class="notif-t">' + esc(n.from_name || '有人') + ' ' + (n.kind === 'reply' ? '回复了你' : (n.kind === 'like' ? '赞了你的帖子' : '评论了你的帖子')) + '</div>' +
+    '<span class="notif-ic">' + k.icon + '</span>' +
+    '<div><div class="notif-t">' + esc(n.from_name || '有人') + ' ' + k.text + '</div>' +
     '<div class="notif-b">' + esc((n.body || '').slice(0, 46)) + '</div>' +
     '<div class="notif-m">' + esc(n.post_title || '') + ' · ' + timeAgo(n.created_at) + '</div></div>' +
     '</div>';

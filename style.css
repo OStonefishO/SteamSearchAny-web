@@ -1916,6 +1916,21 @@ textarea.input { resize: vertical; min-height: 96px; }
 /* 详情页里评论那块也拉开一点 */
 .post-comments { margin-top: 12px; }
 
+/* 评论框改成两行起步的 textarea：回车换行，Ctrl/⌘+回车发送 */
+.cmt-add { align-items: flex-end; }
+.cmt-add .btn { flex: none; }
+/* 用 textarea.cmt-input 这份更高优先级，盖掉全局 textarea.input 的 min-height:96 和 resize */
+.cmt-add textarea.cmt-input,
+textarea.cmt-input {
+  flex: 1; min-width: 0;
+  min-height: 38px; max-height: 132px;
+  padding: 8px 10px; line-height: 1.55;
+  resize: none; overflow-y: auto;
+}
+/* 评论内容保留换行 */
+.cmt-body { white-space: pre-wrap; word-break: break-word; }
+.cmt-line { white-space: pre-wrap; }
+
 @media (max-width: 620px) {
   .post { padding: 13px 12px 10px; }
   .post-title { font-size: 15px; }
