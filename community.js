@@ -557,37 +557,120 @@ export async function renderCommunity(root) {
   await renderList(root);
 }
 
-async function renderList(root) {
-  const size = pageSize();
-  const loginHint = window.__LH_LOGIN_URL
-    ? '<div class="login-sync"><span>✓ 已登录。想在电脑上也登录？</span><button class="btn btn-sm" id="copyLoginUrl">复制登录链接</button><b data-hide-hint="1">×</b></div>'
-    : '';
+const REACT = [
+  { k: 'like', e: '👍', t: '赞' },
+  { k: 'dislike', e: '👎', t: '踩' },
+  { k: 'laugh', e: '😂', t: '大笑' },
+  { k: 'cry', e: '😭', t: '感动' },
+  { k: 'angry', e: '😡', t: '生气' },
+  { k: 'speechless', e: '😑', t: '无语' },
+];
 
-  root.innerHTML = loginHint + `<div class="cmt-bar">
-      <button class="btn btn-primary" id="newPost">＋ 发帖</button>
-      <button class="btn" id="myProfile">我的资料</button>
-      <span class="cmt-hint">点帖子进入详情，可看图与评论</span>
-      <span class="page-set">每页
-        <select id="pageSizeSel" class="input sm" style="width:auto;display:inline-block">
-          ${[10, 20, 30, 50].map((n) => `<option value="${n}" ${n === size ? 'selected' : ''}>${n}</option>`).join('')}
-        </select> 条
-      </span>
-    </div><div id="postList"><div class="empty-state"><span class="spin"></span></div></div>
-    <div class="pager"><button class="btn btn-sm" id="prevPage">上一页</button><span id="pageInfo"></span><button class="btn btn-sm" id="nextPage">下一页</button></div>`;
+function reactionHtml(postId, counts, mine, big) {
+  const size = big ? 'react-lg' : '';
+  const main = REACT.slice(0, 2).map((r) => {
+    const n = counts[r.k] || 0;
+    const on = mine.has(r.k) ? 'on' : '';
+    return '<button class="react ' + size + ' ' + on + '" data-react="' + r.k + '" title="' + r.t + '">' +
+      '<span class="emo">' + r.e + '</span>' + (n ? '<b>' + n + '</b>' : '') + '</button>';
+  }).join('');
 
-  const cp = root.querySelector('#copyLoginUrl');
-  if (cp) {
-    cp.onclick = async () => {
+  const extra = REACT.slice(2).map((r) => {
+    const n = counts[r.k] || 0;
+    const on = mine.has(r.k) ? 'on' : '';
+    return '<button class="react ' + size + ' ' + on + '" data-react="' + r.k + '" title="' + r.t + '">' +
+      '<span class="emo">' + r.e + '</span>' + (n ? '<b>' + n + '</b>' : '') + '</button>';
+  }).join('');
+
+  return '<div class="react-wrap" data-pid="' + postId + '">' + main +
+    '<button class="react more" data-more="1" title="更多心情">＋</button>' +
+    '<div class="react-pop hidden">' + extra + '</div>' +
+    '</div>';
+}
+
+function bindReactions(scope, root) {
+  scope.querySelectorAll('.react[data-react]').forEach((btn) => {
+    btn.onclick = async (ev) => {
+      ev.stopPropagation();
+      if (!currentEmail()) return openLogin();
+      const wrap = btn.closest('.react-wrap');
+      const postId = Number(wrap.dataset.pid);
+      const kind = btn.dataset.react;
+      const wasOn = btn.classList.contains('on');
+      const cntEl = btn.querySelector('b');
+      const cur = cntEl ? Number(cntEl.textContent) || 0 : 0;
+      const next = wasOn ? Math.max(0, cur - 1) : cur + 1;
+
+      btn.classList.toggle('on', !wasOn);
+      if (cntEl) cntEl.textContent = next || '';
+      else if (next) btn.insertAdjacentHTML('beforeend', '<b>' + next + '</b>');
+      popEmoji(btn, btn.querySelector('.emo').textContent);
+
       try {
-        await navigator.clipboard.writeText(window.__LH_LOGIN_URL);
-        cp.textContent = '已复制';
-      } catch {
-        prompt('手动复制这个链接到电脑打开：', window.__LH_LOGIN_URL);
+        const email = currentEmail();
+        if (wasOn) {
+          await rest('/rest/v1/post_likes?post_id=eq.' + postId + '&user_email=eq.' + encodeURIComponent(email) + '&kind=eq.' + kind, { method: 'DELETE' });
+        } else {
+          await rest('/rest/v1/post_likes', { method: 'POST', body: [{ post_id: postId, user_email: email, kind }] });
+        }
+      } catch (e) {
+        btn.classList.toggle('on', wasOn);
+        if (cntEl) cntEl.textContent = cur || '';
+        toast('操作失败：' + e.message);
       }
     };
+  });
+
+  scope.querySelectorAll('[data-more]').forEach((btn) => {
+    btn.onclick = (ev) => {
+      ev.stopPropagation();
+      const pop = btn.parentElement.querySelector('.react-pop');
+      if (pop) pop.classList.toggle('hidden');
+    };
+  });
+}
+
+function popEmoji(anchor, emoji) {
+  const r = anchor.getBoundingClientRect();
+  const el = document.createElement('span');
+  el.className = 'float-emoji';
+  el.textContent = emoji;
+  el.style.left = r.left + r.width / 2 + 'px';
+  el.style.top = r.top + 'px';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 900);
+  anchor.classList.add('pop');
+  setTimeout(() => anchor.classList.remove('pop'), 260);
+}
+
+async function loadReactions(ids) {
+  const rows = await rest('/rest/v1/post_likes?select=post_id,user_email,kind&post_id=in.(' + ids + ')').catch(() => []);
+  const counts = new Map();
+  const mine = new Map();
+  const email = currentEmail();
+  for (const r of rows || []) {
+    if (!counts.has(r.post_id)) counts.set(r.post_id, {});
+    const c = counts.get(r.post_id);
+    c[r.kind || 'like'] = (c[r.kind || 'like'] || 0) + 1;
+    if (email && r.user_email === email) {
+      if (!mine.has(r.post_id)) mine.set(r.post_id, new Set());
+      mine.get(r.post_id).add(r.kind || 'like');
+    }
   }
-  const hideHint = root.querySelector('[data-hide-hint]');
-  if (hideHint) hideHint.onclick = () => { const el = hideHint.parentElement; if (el) el.remove(); };
+  return { counts, mine };
+}
+
+async function renderList(root) {
+  const size = pageSize();
+  root.innerHTML = '<div class="cmt-bar">' +
+    '<button class="btn btn-primary" id="newPost">＋ 发帖</button>' +
+    '<button class="btn" id="myProfile">我的资料</button>' +
+    '<span class="cmt-hint">点帖子进入详情，可看图与评论</span>' +
+    '<span class="page-set">每页 <select id="pageSizeSel" class="input sm" style="width:auto;display:inline-block">' +
+    [10, 20, 30, 50].map((n) => '<option value="' + n + '"' + (n === size ? ' selected' : '') + '>' + n + '</option>').join('') +
+    '</select> 条</span></div>' +
+    '<div id="postList"><div class="empty-state"><span class="spin"></span></div></div>' +
+    '<div class="pager"><button class="btn btn-sm" id="prevPage">上一页</button><span id="pageInfo"></span><button class="btn btn-sm" id="nextPage">下一页</button></div>';
 
   root.querySelector('#newPost').onclick = () => (currentEmail() ? openComposer(null) : openLogin());
   root.querySelector('#myProfile').onclick = () => openLogin();
@@ -600,13 +683,12 @@ async function renderList(root) {
   const list = root.querySelector('#postList');
   let posts = [];
   try {
-    posts = await rest(`/rest/v1/posts?select=id,title,game_id,game_name,body,images,author_name,author_id,author_avatar,author_email,created_at&order=created_at.desc&limit=${size}&offset=${PAGE * size}`) || [];
+    posts = await rest('/rest/v1/posts?select=id,title,game_id,game_name,body,images,author_name,author_id,author_avatar,author_email,created_at&order=created_at.desc&limit=' + size + '&offset=' + PAGE * size) || [];
   } catch (e) {
     const msg = String(e.message || e);
     if (/JWT|expired|401/i.test(msg)) {
       try { localStorage.removeItem('lh.auth'); } catch {}
-      list.innerHTML = '<div class="empty-state">登录已过期<br><span style="font-size:12px;color:var(--text-4)">重新登录后即可恢复</span><br><br>' +
-        '<button class="btn btn-primary" id="relogin">重新登录</button></div>';
+      list.innerHTML = '<div class="empty-state">登录已过期<br><span style="font-size:12px;color:var(--text-4)">重新登录后即可恢复</span><br><br><button class="btn btn-primary" id="relogin">重新登录</button></div>';
       const b = list.querySelector('#relogin');
       if (b) b.onclick = () => openLogin();
       return;
@@ -636,70 +718,37 @@ async function renderList(root) {
   root.querySelector('#nextPage').onclick = () => { if (posts.length === size) { PAGE += 1; renderList(root); } };
 
   if (!posts.length) {
-    list.innerHTML = `<div class="empty-state"><span class="big">🌱</span>${PAGE === 0 ? '还没有人发帖。点「＋ 发帖」写第一条' : '这一页没有内容了'}</div>`;
+    list.innerHTML = '<div class="empty-state"><span class="big">🌱</span>' + (PAGE === 0 ? '还没有人发帖。点「＋ 发帖」写第一条' : '这一页没有内容了') + '</div>';
     return;
   }
 
-  const ids = posts.map((x) => x.id).join(',');
-  const likes = await rest(`/rest/v1/post_likes?select=post_id,user_email&post_id=in.(${ids})`).catch(() => []);
-  const likeCount = new Map();
-  const mine = new Set();
-  for (const l of likes || []) {
-    likeCount.set(l.post_id, (likeCount.get(l.post_id) || 0) + 1);
-    if (email && l.user_email === email) mine.add(l.post_id);
-  }
+  const { counts, mine } = await loadReactions(posts.map((x) => x.id).join(','));
 
   list.innerHTML = posts.map((x) => {
     const av = avatarOf(x);
-    const n = likeCount.get(x.id) || 0;
-    const liked = mine.has(x.id);
+    const c = counts.get(x.id) || {};
+    const my = mine.get(x.id) || new Set();
     const imgs = Array.isArray(x.images) ? x.images : [];
-    return `<article class="post post-clickable" data-open="${x.id}">
-      <header>${avatarHtml(av, 26)}
-        ${x.game_id ? `<a class="post-game" href="?info=${x.game_id}" data-noclick="1">${esc(x.game_name)}</a>` : `<span class="post-game plain">${esc(x.game_name)}</span>`}
-        <span class="post-meta">${esc(x.author_name)} · ${timeAgo(x.created_at)}</span>
-      </header>
-      ${x.title ? `<h4 class="post-title">${esc(x.title)}</h4>` : ''}
-      <p class="post-body">${esc(x.body).slice(0, 160)}${x.body.length > 160 ? '…' : ''}</p>
-      ${imgs.length ? `<div class="imgs">${imgs.slice(0, 4).map((src) => `<img src="${src}">`).join('')}${imgs.length > 4 ? `<span class="more-img">+${imgs.length - 4}</span>` : ''}</div>` : ''}
-      <div class="post-foot">
-        <button class="like ${liked ? 'on' : ''}" data-like="${x.id}">${liked ? '♥' : '♡'} ${n || ''}</button>
-        <span class="cmt-n">评论</span>
-      </div>
-    </article>`;
+    return '<article class="post post-clickable" data-open="' + x.id + '">' +
+      '<header>' + avatarHtml(av, 26) +
+      (x.game_id ? '<a class="post-game" href="?info=' + x.game_id + '" data-noclick="1">' + esc(x.game_name) + '</a>' : '<span class="post-game plain">' + esc(x.game_name) + '</span>') +
+      '<span class="post-meta">' + esc(x.author_name) + ' · ' + timeAgo(x.created_at) + '</span></header>' +
+      (x.title ? '<h4 class="post-title">' + esc(x.title) + '</h4>' : '') +
+      '<p class="post-body">' + esc(x.body).slice(0, 160) + (x.body.length > 160 ? '…' : '') + '</p>' +
+      (imgs.length ? '<div class="imgs">' + imgs.slice(0, 4).map((src) => '<img src="' + src + '">').join('') + (imgs.length > 4 ? '<span class="more-img">+' + (imgs.length - 4) + '</span>' : '') + '</div>' : '') +
+      '<div class="post-foot">' + reactionHtml(x.id, c, my, false) + '<span class="cmt-n" data-noclick="1">评论</span></div>' +
+      '</article>';
   }).join('');
 
   list.querySelectorAll('[data-open]').forEach((el) => {
     el.onclick = (ev) => {
-      if (ev.target.closest('[data-noclick]')) return;
-      if (ev.target.closest('[data-like]')) return;
-      const id = Number(el.dataset.open);
-      CUR = posts.find((p) => p.id === id);
+      if (ev.target.closest('[data-noclick]') || ev.target.closest('.react')) return;
+      CUR = posts.find((p) => p.id === Number(el.dataset.open));
       VIEW = 'detail';
       renderCommunity(root);
     };
   });
-
-  list.querySelectorAll('[data-like]').forEach((btn) => {
-    btn.onclick = async (ev) => {
-      ev.stopPropagation();
-      if (!currentEmail()) return openLogin();
-      const id = Number(btn.dataset.like);
-      const wasOn = btn.classList.contains('on');
-      const cur = Number((btn.textContent.match(/\d+/) || [0])[0]) || 0;
-      const next = wasOn ? Math.max(0, cur - 1) : cur + 1;
-      btn.classList.toggle('on', !wasOn);
-      btn.innerHTML = (wasOn ? '♡' : '♥') + (next ? ' ' + next : '');
-      try {
-        if (wasOn) await rest(`/rest/v1/post_likes?post_id=eq.${id}&user_email=eq.${encodeURIComponent(currentEmail())}`, { method: 'DELETE' });
-        else await rest('/rest/v1/post_likes', { method: 'POST', body: [{ post_id: id, user_email: currentEmail() }] });
-      } catch (e) {
-        btn.classList.toggle('on', wasOn);
-        btn.innerHTML = (wasOn ? '♥' : '♡') + (cur ? ' ' + cur : '');
-        toast('操作失败：' + e.message);
-      }
-    };
-  });
+  bindReactions(list, root);
 }
 
 function avatarOf(x) {
@@ -712,33 +761,28 @@ async function renderDetail(root) {
   if (!x) { VIEW = 'list'; return renderList(root); }
   const av = avatarOf(x);
   const imgs = Array.isArray(x.images) ? x.images : [];
-  root.innerHTML = `<div class="cmt-bar">
-      <button class="btn" id="backBtn">← 返回社区</button>
-      <span style="flex:1"></span>
-      <button class="btn btn-sm" id="delPost" style="display:none">删除帖子</button>
-    </div>
-    <article class="post">
-      <header>${avatarHtml(av, 34)}
-        <a class="post-author" data-author="${esc(x.author_name)}" data-aid="${x.author_id || ''}">${esc(x.author_name)}<span class="post-uid">#${x.author_id || '----'}</span></a>
-        ${x.game_id ? `<a class="post-game" href="?info=${x.game_id}">${esc(x.game_name)}</a>` : `<span class="post-game plain">${esc(x.game_name)}</span>`}
-        <span class="post-meta">${timeAgo(x.created_at)}</span>
-      </header>
-      ${x.title ? `<h4 class="post-title" style="font-size:18px">${esc(x.title)}</h4>` : ''}
-      <p class="post-body" style="font-size:14px">${esc(x.body)}</p>
-      ${imgs.length ? `<div class="detail-imgs">${imgs.map((s) => `<img src="${s}" loading="lazy">`).join('')}</div>` : ''}
-      <div class="post-foot"><span class="cmt-n">加载评论中…</span><span id="likeSlot"></span></div>
-      <div id="cmtList" class="post-comments"></div>
-      <div class="cmt-add">
-        <input class="input sm" id="cmtInput" placeholder="评论两句…">
-        <button class="btn btn-sm" id="cmtSend">发送</button>
-      </div>
-    </article>`;
+  root.innerHTML = '<div class="cmt-bar"><button class="btn" id="backBtn">← 返回社区</button>' +
+    '<span style="flex:1"></span><button class="btn btn-sm" id="delPost" style="display:none">删除帖子</button></div>' +
+    '<article class="post">' +
+    '<header>' + avatarHtml(av, 34) +
+    '<a class="post-author" data-author="' + esc(x.author_name) + '" data-aid="' + (x.author_id || '') + '">' + esc(x.author_name) + '<span class="post-uid">#' + (x.author_id || '----') + '</span></a>' +
+    (x.game_id ? '<a class="post-game" href="?info=' + x.game_id + '">' + esc(x.game_name) + '</a>' : '<span class="post-game plain">' + esc(x.game_name) + '</span>') +
+    '<span class="post-meta">' + timeAgo(x.created_at) + '</span></header>' +
+    (x.title ? '<h4 class="post-title" style="font-size:18px">' + esc(x.title) + '</h4>' : '') +
+    '<p class="post-body" style="font-size:14px">' + esc(x.body) + '</p>' +
+    (imgs.length ? '<div class="detail-imgs">' + imgs.map((src) => '<img src="' + src + '" loading="lazy">').join('') + '</div>' : '') +
+    '<div class="post-foot" id="reactSlot"></div>' +
+    '<div id="cmtList" class="post-comments"></div>' +
+    '<div class="cmt-add"><input class="input sm" id="cmtInput" placeholder="评论两句…"><button class="btn btn-sm" id="cmtSend">发送</button></div>' +
+    '</article>';
 
   root.querySelector('#backBtn').onclick = () => { VIEW = 'list'; CUR = null; renderCommunity(root); };
+  root.querySelector('[data-author]').onclick = () => openAuthor(x.author_name, x.author_id);
 
   const delBtn = root.querySelector('#delPost');
   const emailNow = currentEmail();
-  const canDel = emailNow && (x.author_email === emailNow || (!x.author_email && x.author_name === profile().name));
+  const meNow = profile();
+  const canDel = emailNow && (x.author_email === emailNow || Number(x.author_id) === meNow.id || (!x.author_email && x.author_name === meNow.name));
   if (delBtn && canDel) {
     delBtn.style.display = '';
     delBtn.onclick = async () => {
@@ -747,57 +791,32 @@ async function renderDetail(root) {
       try {
         await rest('/rest/v1/posts?id=eq.' + x.id, { method: 'DELETE' });
         toast('已删除');
-        VIEW = 'list';
-        CUR = null;
-        renderCommunity(root);
+        VIEW = 'list'; CUR = null; renderCommunity(root);
       } catch (e) {
         toast('删除失败：' + e.message);
         delBtn.disabled = false;
       }
     };
   }
-  root.querySelector('[data-author]').onclick = () => openAuthor(x.author_name, x.author_id);
 
-  // 点赞
-  try {
-    const ls = await rest(`/rest/v1/post_likes?select=user_email&post_id=eq.${x.id}`) || [];
-    const email = currentEmail();
-    const liked = email && ls.some((l) => l.user_email === email);
-    root.querySelector('#likeSlot').innerHTML = `<button class="like ${liked ? 'on' : ''}" id="detailLike">${liked ? '♥' : '♡'} ${ls.length || ''}</button>`;
-    root.querySelector('#detailLike').onclick = async (ev) => {
-      if (!email) return openLogin();
-      const btn = ev.currentTarget;
-      btn.disabled = true;
-      const next = liked ? Math.max(0, ls.length - 1) : ls.length + 1;
-      btn.classList.toggle('on', !liked);
-      btn.innerHTML = (liked ? '♡' : '♥') + (next ? ' ' + next : '');
-      try {
-        if (liked) await rest(`/rest/v1/post_likes?post_id=eq.${x.id}&user_email=eq.${encodeURIComponent(email)}`, { method: 'DELETE' });
-        else await rest('/rest/v1/post_likes', { method: 'POST', body: [{ post_id: x.id, user_email: email }] });
-      } catch (e) {
-        btn.classList.toggle('on', liked);
-        btn.innerHTML = (liked ? '♥' : '♡') + (ls.length ? ' ' + ls.length : '');
-        toast('失败');
-      }
-    };
-  } catch {}
+  const { counts, mine } = await loadReactions(String(x.id));
+  const slot = root.querySelector('#reactSlot');
+  slot.innerHTML = reactionHtml(x.id, counts.get(x.id) || {}, mine.get(x.id) || new Set(), true);
+  bindReactions(slot, root);
 
-  // 评论
   const cmtList = root.querySelector('#cmtList');
   try {
-    const cs = await rest(`/rest/v1/comments?select=id,body,author_name,author_email,created_at&post_id=eq.${x.id}&order=created_at.asc`) || [];
-    cmtList.innerHTML = cs.map((c) => {
-      const canDel = currentEmail() && c.author_email === currentEmail();
-      return `<div class="cmt">
-        <b>${esc(c.author_name)}</b> ${esc(c.body)}
-        <span class="cmt-time">${timeAgo(c.created_at)}</span>
-        ${canDel ? `<button class="cmt-del" data-delc="${c.id}">删除</button>` : ''}
-      </div>`;
+    const cs = await rest('/rest/v1/comments?select=id,body,author_name,author_email,created_at&post_id=eq.' + x.id + '&order=created_at.asc') || [];
+    cmtList.innerHTML = cs.map((cm) => {
+      const canDelC = currentEmail() && cm.author_email === currentEmail();
+      return '<div class="cmt"><b>' + esc(cm.author_name) + '</b> ' + esc(cm.body) +
+        '<span class="cmt-time">' + timeAgo(cm.created_at) + '</span>' +
+        (canDelC ? '<button class="cmt-del" data-delc="' + cm.id + '">删除</button>' : '') + '</div>';
     }).join('') || '<div class="cmt" style="color:var(--text-4)">还没有评论</div>';
     cmtList.querySelectorAll('[data-delc]').forEach((b) => {
       b.onclick = async () => {
         if (!confirm('删除这条评论？')) return;
-        try { await rest(`/rest/v1/comments?id=eq.${b.dataset.delc}`, { method: 'DELETE' }); renderDetail(root); }
+        try { await rest('/rest/v1/comments?id=eq.' + b.dataset.delc, { method: 'DELETE' }); renderDetail(root); }
         catch (e) { toast('删除失败：' + e.message); }
       };
     });
@@ -811,203 +830,6 @@ async function renderDetail(root) {
       } catch (e) { toast('评论失败'); }
     };
   } catch (e) {
-    cmtList.innerHTML = `<div class="cmt">评论读取失败：${esc(e.message)}</div>`;
+    cmtList.innerHTML = '<div class="cmt">评论读取失败：' + esc(e.message) + '</div>';
   }
 }
-
-
-/* ================= 设备配对中转 ================= */
-const AUTH_SAVE = 'lh.auth';
-
-function randCode(n) {
-  const A = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
-  let out = '';
-  const buf = new Uint8Array(n);
-  crypto.getRandomValues(buf);
-  for (let i = 0; i < n; i += 1) out += A[buf[i] % A.length];
-  return out;
-}
-function randSecret() {
-  const buf = new Uint8Array(16);
-  crypto.getRandomValues(buf);
-  return [...buf].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-async function deriveKey(code) {
-  const raw = new TextEncoder().encode('lh-relay|' + code);
-  const hash = await crypto.subtle.digest('SHA-256', raw);
-  return crypto.subtle.importKey('raw', hash, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
-}
-const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
-const unb64 = (s) => Uint8Array.from(atob(s), (ch) => ch.charCodeAt(0));
-
-async function encryptPayload(code, obj) {
-  const key = await deriveKey(code);
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const data = new TextEncoder().encode(JSON.stringify(obj));
-  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
-  return b64(iv) + '.' + b64(ct);
-}
-async function decryptPayload(code, payload) {
-  const [ivB64, ctB64] = String(payload).split('.');
-  const key = await deriveKey(code);
-  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(ivB64) }, key, unb64(ctB64));
-  return JSON.parse(new TextDecoder().decode(plain));
-}
-
-/** 电脑端：生成配对码并等待手机送来会话 */
-export function openRelayReceive() {
-  const m = document.getElementById('modal');
-  const box = document.getElementById('modalContent');
-  if (!m) return;
-  m.hidden = false;
-  const code = randCode(6);
-  const secret = randSecret();
-  const expires = new Date(Date.now() + 120000).toISOString();
-
-  box.innerHTML = '<div class="m-body"><h3>手机 → 电脑</h3>' +
-    '<p style="color:var(--text-3);font-size:13px;margin:8px 0 12px">在<b>已登录的手机</b>上打开「我的账号 → 同步到电脑」，输入下面的配对码。</p>' +
-    '<div class="relay-code">' + code + '</div>' +
-    '<p id="relayMsg" style="font-size:12px;color:var(--text-4);margin-top:10px">等待中…（120 秒内有效）</p></div>';
-
-  const msg = box.querySelector('#relayMsg');
-  rest('/rest/v1/login_relay', {
-    method: 'POST',
-    headers: { Prefer: 'return=minimal' },
-    body: [{ code, secret, expires_at: expires }],
-  }).catch(() => { msg.textContent = '创建失败：请先在 Supabase 建 login_relay 表'; });
-
-  let stopped = false;
-  const t0 = Date.now();
-  const tick = async () => {
-    if (stopped) return;
-    if (Date.now() - t0 > 125000) { msg.textContent = '已超时，重新打开再来一次'; return; }
-    try {
-      const res = await rest('/rest/v1/rpc/relay_claim', { method: 'POST', body: { p_secret: secret } });
-      const payload = typeof res === 'string' ? res : (res && res.value);
-      if (payload) {
-        const sess = await decryptPayload(code, payload);
-        localStorage.setItem(AUTH_SAVE, JSON.stringify(sess));
-        stopped = true;
-        msg.textContent = '✓ 已接收，正在登录…';
-        setTimeout(() => location.reload(), 600);
-        return;
-      }
-    } catch {}
-    setTimeout(tick, 2000);
-  };
-  setTimeout(tick, 1500);
-}
-
-/** 手机端：把当前会话发到指定配对码 */
-export function openRelaySend() {
-  const m = document.getElementById('modal');
-  const box = document.getElementById('modalContent');
-  if (!m) return;
-  const s = session();
-  if (!s || !s.access_token) return openLogin();
-  m.hidden = false;
-  box.innerHTML = '<div class="m-body"><h3>同步到电脑</h3>' +
-    '<p style="color:var(--text-3);font-size:13px;margin:8px 0 12px">输入电脑上显示的 6 位配对码。</p>' +
-    '<input class="input" id="relayInput" maxlength="6" placeholder="A7K2M9" style="text-transform:uppercase;letter-spacing:4px;text-align:center;font-size:20px">' +
-    '<button class="btn btn-primary btn-block" id="relayGo" style="margin-top:10px">发送会话</button>' +
-    '<p id="relaySendMsg" style="font-size:12px;color:var(--text-4);margin-top:10px"></p></div>';
-
-  const msg = box.querySelector('#relaySendMsg');
-  box.querySelector('#relayGo').onclick = async () => {
-    const code = (box.querySelector('#relayInput').value || '').trim().toUpperCase();
-    if (code.length !== 6) return (msg.textContent = '配对码是 6 位');
-    msg.textContent = '发送中…';
-    try {
-      const payload = await encryptPayload(code, s);
-      await rest('/rest/v1/rpc/relay_post', { method: 'POST', body: { p_code: code, p_payload: payload } });
-      msg.textContent = '✓ 已发送，回电脑上看';
-    } catch (e) {
-      msg.textContent = '失败：' + e.message;
-    }
-  };
-}
-
-/** 忘记密码：发恢复邮件 */
-export async function recoverPassword(email) {
-  const cfg = window.LIGHTHOUSE_SUPABASE || {};
-  const back = encodeURIComponent('https://ostonefisho.github.io/SteamSearchAny-auth/');
-  const res = await fetch(cfg.url + '/auth/v1/recover?redirect_to=' + back, {
-    method: 'POST',
-    headers: { apikey: cfg.anonKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
-  });
-  if (!res.ok) {
-    const d = await res.json().catch(() => ({}));
-    throw new Error(d.message || '发送失败');
-  }
-  return true;
-}
-
-
-/* ================= 找回密码 ================= */
-export function openRecover() {
-  const m = document.getElementById('modal');
-  const box = document.getElementById('modalContent');
-  if (!m) return;
-  m.hidden = false;
-  box.innerHTML = '<div class="m-body">' +
-    '<h3>找回密码</h3>' +
-    '<p style="color:var(--text-3);font-size:13px;margin:8px 0 14px">输入注册邮箱，我们会发一封重置邮件。点邮件里的链接即可重设密码。</p>' +
-    '<input class="input" id="rcEmail" type="email" placeholder="you@example.com" autocomplete="email">' +
-    '<button class="btn btn-primary btn-block" id="rcSend" style="margin-top:10px">发送重置邮件</button>' +
-    '<p id="rcMsg" style="font-size:12px;color:var(--text-4);margin-top:10px"></p>' +
-    '<button class="btn btn-block" id="rcBack" style="margin-top:14px">返回登录</button>' +
-    '</div>';
-  const msg = box.querySelector('#rcMsg');
-  box.querySelector('#rcBack').onclick = () => openLogin();
-  box.querySelector('#rcSend').onclick = async () => {
-    const em = box.querySelector('#rcEmail').value.trim();
-    if (!em) return (msg.textContent = '请填邮箱');
-    msg.textContent = '发送中…';
-    try {
-      await recoverPassword(em);
-      msg.textContent = '✓ 已发送。到邮箱点开链接后会跳回本站，然后设置新密码。';
-    } catch (e) {
-      msg.textContent = '失败：' + e.message;
-    }
-  };
-}
-
-/** 从重置邮件回来时，直接给"设置新密码"界面 */
-export function openResetPassword() {
-  const m = document.getElementById('modal');
-  const box = document.getElementById('modalContent');
-  if (!m) return;
-  if (!currentEmail()) return openRecover();
-  m.hidden = false;
-  box.innerHTML = '<div class="m-body">' +
-    '<h3>设置新密码</h3>' +
-    '<p style="color:var(--text-3);font-size:13px;margin:8px 0 14px">为 ' + esc(currentEmail()) + ' 设置一个新密码。</p>' +
-    '<input class="input" id="np1" type="password" placeholder="新密码（至少 6 位）" autocomplete="new-password">' +
-    '<input class="input" id="np2" type="password" placeholder="再输一次确认" style="margin-top:8px" autocomplete="new-password">' +
-    '<button class="btn btn-primary btn-block" id="npGo" style="margin-top:10px">保存新密码</button>' +
-    '<p id="npMsg" style="font-size:12px;color:var(--text-4);margin-top:10px"></p>' +
-    '</div>';
-  const msg = box.querySelector('#npMsg');
-  box.querySelector('#npGo').onclick = async () => {
-    const a = box.querySelector('#np1').value;
-    const b = box.querySelector('#np2').value;
-    if (!a || a.length < 6) return (msg.textContent = '密码至少 6 位');
-    if (a !== b) return (msg.textContent = '两次输入的密码不一致');
-    msg.textContent = '保存中…';
-    try {
-      await setPassword(a);
-      msg.textContent = '✓ 已保存，以后用邮箱+新密码登录';
-    } catch (e) {
-      msg.textContent = '失败：' + e.message;
-    }
-  };
-}
-
-/* 从重置邮件点回来（URL 带 type=recovery）时自动弹出重设界面 */
-try {
-  const hash = decodeURIComponent(location.hash || '');
-  if (hash.includes('type=recovery') || hash.includes('type%3Drecovery')) {
-    setTimeout(() => { try { openResetPassword(); } catch {} }, 900);
-  }
-} catch {}
