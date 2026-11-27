@@ -28,13 +28,24 @@ export function profile() {
     id = 1000000000 + Math.floor(Math.random() * 9000000000);
     try { p.id = id; localStorage.setItem(PK, JSON.stringify(p)); } catch {}
   }
-  return { id, name: p.name || (email ? email.split('@')[0] : ''), avatar: p.avatar || '🎮', img: p.img || '', color: p.color || '#45bdf7' };
+  // bio 必须一起返回：少了它，账号面板每次打开 textarea 都是空的（看起来像“简介没保存”）
+  return {
+    id,
+    name: p.name || (email ? email.split('@')[0] : ''),
+    avatar: p.avatar || '🎮',
+    img: p.img || '',
+    color: p.color || '#45bdf7',
+    bio: p.bio || '',
+  };
 }
 function saveProfile(p) { try { localStorage.setItem(PK, JSON.stringify(p)); } catch {} }
 
 const AVATARS = ['🎮', '🕹️', '👾', '🚀', '🌌', '🐱', '🦊', '🐳', '🌙', '⭐', '🔥', '🎧'];
 const COLORS = ['#45bdf7', '#b6e04a', '#ffb04d', '#f4736f', '#a78bfa', '#34d399', '#f472b6'];
 let DRAFT = null;
+// 账号面板折叠区状态（裁剪头像会重开面板，这里保证展开状态不丢）
+const ACC = { avatar: false, color: false, pw: false };
+let DIRTY = false;   // 面板里有未保存的改动（切头像会重开面板，所以要记在模块上）
 
 function avatarHtml(p, size = 40) {
   const base = `width:${size}px;height:${size}px;border-radius:${Math.round(size * 0.28)}px;display:grid;place-items:center;overflow:hidden;border:1px solid ${p.color || '#45bdf7'}55;background:${p.color || '#45bdf7'}1f;flex:none;`;
@@ -99,17 +110,47 @@ async function rest(path, opts = {}, retried = false) {
 
 /* ---------- 远端资料 ---------- */
 async function apiGetProfile(email) {
-  const rows = await rest('/rest/v1/profiles?select=user_email,uid,name,avatar,color&user_email=eq.' + encodeURIComponent(email) + '&limit=1');
+  const rows = await rest('/rest/v1/profiles?select=user_email,uid,name,avatar,color,bio&user_email=eq.' + encodeURIComponent(email) + '&limit=1');
   return rows && rows[0];
 }
+/** 把错误翻译成用户看得懂的一句话 */
+function saveErrText(e) {
+  const m = String((e && e.message) || e || '');
+  if (/row-level security/i.test(m)) return '云端拒绝了写入：profiles 表缺 UPDATE 策略（把 db/profiles.sql 里的 SQL 跑一遍）';
+  if (/JWT|expired|token/i.test(m)) return '登录状态过期了，请重新登录后再保存';
+  if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return '网络断了，云端没存上（本地已保存）';
+  if (/column .* does not exist/i.test(m)) return 'profiles 表缺字段：' + m;
+  return m || '未知错误';
+}
+/**
+ * 写资料到云端。
+ * 先 PATCH 已有行（不依赖 ON CONFLICT，也不需要 INSERT 策略），
+ * 没有行再走 upsert 建行。失败一定抛错，让界面能显示原因，
+ * 不再用 .catch(()=>{}) 吞掉——那正是“简介看不见保存结果”的元凶。
+ */
 async function apiUpsertProfile(p) {
   const email = currentEmail();
-  if (!email) return;
-  await rest('/rest/v1/profiles', {
-    method: 'POST',
-    headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-    body: [{ user_email: email, uid: p.id, name: p.name, avatar: p.img || p.avatar, color: p.color, bio: p.bio || '', updated_at: new Date().toISOString() }],
+  if (!email) throw new Error('未登录');
+  const row = {
+    name: p.name || '',
+    avatar: p.img || p.avatar || '',
+    color: p.color || '',
+    bio: (p.bio || '').slice(0, 120),
+    uid: p.id,
+    updated_at: new Date().toISOString(),
+  };
+  const patched = await rest('/rest/v1/profiles?user_email=eq.' + encodeURIComponent(email), {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: row,
   });
+  if (Array.isArray(patched) && patched.length) return patched[0];
+  const created = await rest('/rest/v1/profiles', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+    body: [{ user_email: email, ...row }],
+  });
+  return (Array.isArray(created) && created[0]) || null;
 }
 export async function syncProfile() {
   const email = currentEmail();
@@ -124,7 +165,9 @@ export async function syncProfile() {
         avatar: (remote.avatar || '').startsWith('data:') ? local.avatar : (remote.avatar || local.avatar),
         img: (remote.avatar || '').startsWith('data:') ? remote.avatar : (local.img || ''),
         color: remote.color || local.color,
-        bio: remote.bio || local.bio || '',
+        // 云端 bio 为 null 说明这行还没写过简介，才回落本地；
+        // 云端是空字符串 '' 代表用户主动清空，要尊重它
+        bio: remote.bio === null || remote.bio === undefined ? (local.bio || '') : remote.bio,
       };
       saveProfile(merged);
       return merged;
@@ -301,83 +344,180 @@ export function openLogin() {
     <div class="profile-head"><span id="avatarPreview">${avatarHtml(p, 56)}</span>
       <div><div class="profile-name">${esc(p.name)}</div>
       <div class="profile-mail">${esc(email)} · UID #${p.id}</div></div></div>
-    <label class="field-label">昵称</label>
+
+    <label class="field-label" for="pName">昵称</label>
     <input class="input" id="pName" maxlength="16" value="${esc(p.name)}">
-    <label class="field-label">个人简介（别人点进你的主页能看到）</label>
-    <textarea class="input" id="pBio" rows="2" maxlength="120" placeholder="一句话介绍自己，留空会显示「这个人懒得写简介」"></textarea>
 
-    <label class="field-label">上传头像（可缩放）</label>
-    <div style="display:flex;gap:8px;align-items:center">
-      <button class="btn" id="uploadBtn">选择图片</button>
-      <button class="btn" id="clearImg">用 emoji</button>
-      <input type="file" id="fileIn" accept="image/*" class="hidden">
-    </div>
-    <label class="field-label">或选一个 emoji</label>
-    <div class="picker" id="pAvatars">${AVATARS.map((a) => `<button class="pick ${a === p.avatar && !p.img ? 'on' : ''}" data-av="${a}">${a}</button>`).join('')}</div>
-    <label class="field-label">主题色</label>
-    <div class="picker" id="pColors">${COLORS.map((c) => `<button class="pick-dot ${c === p.color ? 'on' : ''}" data-c="${c}" style="background:${c}"></button>`).join('')}</div>
-    <div id="pwWarn" class="pw-warn hidden">⚠ 你还没设置登录密码<br><span>不设密码的话，换设备只能用邮件链接登录，很不方便。</span></div>
-    <label class="field-label">登录密码（设置后可在任意设备用邮箱+密码登录）</label>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <input class="input" id="newPw" type="password" placeholder="设置密码（至少 6 位）" autocomplete="new-password">
-      <input class="input" id="newPw2" type="password" placeholder="再输一次确认" autocomplete="new-password">
-      <button class="btn" id="setPwBtn" style="align-self:flex-start">设置密码</button>
-    </div>
-    <p id="pwInfo" style="font-size:11.5px;color:var(--text-4);margin-top:6px"></p>
+    <label class="field-label" for="pBio">个人简介</label>
+    <textarea class="input" id="pBio" rows="3" maxlength="120" placeholder="一句话介绍自己，留空会显示「这个人懒得写简介」"></textarea>
+    <div class="bio-meta"><span>别人点进你的主页就能看到</span><span><b id="bioLen">0</b>/120</span></div>
 
-    <div style="display:flex;gap:8px;margin-top:16px">
-      <button class="btn btn-primary" id="pSave" style="flex:1">保存资料</button>
+    <div class="acc" id="accAvatar">
+      <button type="button" class="acc-head" aria-expanded="false">
+        <span class="acc-k">头像</span>
+        <span class="acc-v" id="accAvatarVal">🎮</span>
+        <span class="acc-act">更换</span><i class="acc-chev"></i>
+      </button>
+      <div class="acc-body" hidden>
+        <div class="acc-row">
+          <button class="btn btn-sm" id="uploadBtn">上传图片</button>
+          <button class="btn btn-sm" id="clearImg">用 emoji</button>
+          <input type="file" id="fileIn" accept="image/*" class="hidden">
+          <span class="acc-hint">自动裁成方形</span>
+        </div>
+        <div class="picker" id="pAvatars">${AVATARS.map((a) => `<button class="pick ${a === p.avatar && !p.img ? 'on' : ''}" data-av="${a}">${a}</button>`).join('')}</div>
+      </div>
+    </div>
+
+    <div class="acc" id="accColor">
+      <button type="button" class="acc-head" aria-expanded="false">
+        <span class="acc-k">主题色</span>
+        <span class="acc-v"><i class="acc-dot" id="accColorDot"></i><em id="accColorVal"></em></span>
+        <span class="acc-act">更换</span><i class="acc-chev"></i>
+      </button>
+      <div class="acc-body" hidden>
+        <div class="picker" id="pColors">${COLORS.map((c) => `<button class="pick-dot ${c === p.color ? 'on' : ''}" data-c="${c}" style="background:${c}"></button>`).join('')}</div>
+      </div>
+    </div>
+
+    <div class="acc" id="accPw">
+      <button type="button" class="acc-head" aria-expanded="false">
+        <span class="acc-k">登录密码</span>
+        <span class="acc-v" id="accPwVal">未设置</span>
+        <span class="acc-act">修改</span><i class="acc-chev"></i>
+      </button>
+      <div class="acc-body" hidden>
+        <div id="pwWarn" class="pw-warn hidden">⚠ 你还没设置登录密码<br><span>不设密码的话，换设备只能用邮件链接登录，很不方便。</span></div>
+        <input class="input" id="newPw" type="password" placeholder="设置密码（至少 6 位）" autocomplete="new-password">
+        <input class="input" id="newPw2" type="password" placeholder="再输一次确认" style="margin-top:8px" autocomplete="new-password">
+        <div class="acc-row" style="margin-top:8px">
+          <button class="btn btn-sm" id="setPwBtn">设置密码</button>
+          <button class="btn btn-sm" id="relayBtn">同步登录到另一台设备</button>
+        </div>
+        <p id="pwInfo" class="form-msg"></p>
+      </div>
+    </div>
+
+    <p id="pMsg" class="form-msg"></p>
+    <div class="save-row">
+      <button class="btn btn-primary" id="pSave">保存资料</button>
       <button class="btn" id="doLogout">退出登录</button>
-    </div></div>`;
+    </div>
+    <p class="save-hint${DIRTY ? '' : ' hidden'}" id="pDirty">● 有未保存的改动，记得点「保存资料」</p>
+  </div>`;
 
   const draft = DRAFT;
   const bioEl = box.querySelector('#pBio');
   if (bioEl) bioEl.value = DRAFT.bio || '';
+  const markDirty = () => { DIRTY = true; const el = box.querySelector('#pDirty'); if (el) el.hidden = false; };
+  const lenEl = box.querySelector('#bioLen');
+  const syncLen = () => { if (lenEl && bioEl) lenEl.textContent = String((bioEl.value || '').length); };
+  syncLen();
+  if (bioEl) bioEl.oninput = () => { syncLen(); markDirty(); };
+  const nameEl = box.querySelector('#pName');
+  if (nameEl) nameEl.oninput = markDirty;
+
   const preview = () => { const el = box.querySelector('#avatarPreview'); if (el) el.innerHTML = avatarHtml(draft, 56); };
+  const paintAvatarVal = () => { const el = box.querySelector('#accAvatarVal'); if (el) el.textContent = draft.img ? '自定义图片' : (draft.avatar || '🎮'); };
+  const paintColorVal = () => {
+    const dot = box.querySelector('#accColorDot');
+    const v = box.querySelector('#accColorVal');
+    if (dot) dot.style.background = draft.color || '#45bdf7';
+    if (v) v.textContent = draft.color || '#45bdf7';
+  };
+  paintAvatarVal();
+  paintColorVal();
+
+  /* 折叠区：头像 / 主题色 / 密码默认都收起，点一下才展开，面板不再一屏全是设置项 */
+  const accMap = {
+    avatar: box.querySelector('#accAvatar'),
+    color: box.querySelector('#accColor'),
+    pw: box.querySelector('#accPw'),
+  };
+  const applyAcc = (k, open) => {
+    const root = accMap[k];
+    if (!root) return;
+    ACC[k] = !!open;
+    root.classList.toggle('open', !!open);
+    const body = root.querySelector('.acc-body');
+    if (body) body.hidden = !open;
+    const head = root.querySelector('.acc-head');
+    if (head) head.setAttribute('aria-expanded', open ? 'true' : 'false');
+  };
+  Object.keys(accMap).forEach((k) => {
+    const root = accMap[k];
+    if (!root) return;
+    const head = root.querySelector('.acc-head');
+    if (head) head.onclick = () => applyAcc(k, !ACC[k]);
+    applyAcc(k, !!ACC[k]);
+  });
+
   box.querySelector('#uploadBtn').onclick = () => box.querySelector('#fileIn').click();
   box.querySelector('#fileIn').onchange = (e) => {
     const f = e.target.files && e.target.files[0];
-    if (f) openAvatarEditor(f, (dataUrl) => { DRAFT = { ...(DRAFT || profile()), img: dataUrl }; saveProfile(DRAFT); refreshAuthButton(); refreshOwnPosts(DRAFT).catch(() => {}); toast('头像已保存'); });
+    if (!f) return;
+    openAvatarEditor(f, (dataUrl) => {
+      draft.img = dataUrl;          // 就地改：openLogin() 重开面板时读到的还是同一个 DRAFT
+      paintAvatarVal();
+      markDirty();
+    });
   };
-  box.querySelector('#clearImg').onclick = () => { draft.img = ''; preview(); };
+  box.querySelector('#clearImg').onclick = () => { draft.img = ''; preview(); paintAvatarVal(); markDirty(); };
   box.querySelector('#pAvatars').onclick = (e) => {
     const b = e.target.closest('[data-av]');
     if (!b) return;
     draft.avatar = b.dataset.av; draft.img = '';
     box.querySelectorAll('#pAvatars .pick').forEach((x) => x.classList.toggle('on', x.dataset.av === draft.avatar));
-    preview();
+    preview(); paintAvatarVal(); markDirty();
   };
   box.querySelector('#pColors').onclick = (e) => {
     const b = e.target.closest('[data-c]');
     if (!b) return;
     draft.color = b.dataset.c;
     box.querySelectorAll('#pColors .pick-dot').forEach((x) => x.classList.toggle('on', x.dataset.c === draft.color));
-    preview();
+    preview(); paintColorVal(); markDirty();
   };
-  box.querySelector('#pSave').onclick = () => {
+
+  const msgEl = box.querySelector('#pMsg');
+  const say = (txt, kind) => { if (!msgEl) return; msgEl.className = 'form-msg ' + (kind || ''); msgEl.textContent = txt; };
+
+  box.querySelector('#pSave').onclick = async () => {
+    const btn = box.querySelector('#pSave');
     draft.name = (box.querySelector('#pName').value || '').trim().slice(0, 16) || email.split('@')[0];
     draft.bio = (box.querySelector('#pBio').value || '').trim().slice(0, 120);
     saveProfile(draft);
-    apiUpsertProfile(draft).catch(() => {});
-    refreshOwnPosts(draft).catch(() => {});
-    DRAFT = null;
-    m.hidden = true;
+    DRAFT = draft;
     refreshAuthButton();
-    toast('资料已保存');
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '保存中…';
+    say('正在写入云端…', 'form-dim');
+    try {
+      await apiUpsertProfile(draft);
+      refreshOwnPosts(draft).catch(() => {});
+      DIRTY = false;
+      DRAFT = null;
+      m.hidden = true;
+      toast('资料已保存');
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = label;
+      say('✕ 云端没存上：' + saveErrText(e), 'form-err');
+      toast('本地已保存，云端失败');
+    }
   };
-  const pwWarn = box.querySelector('#pwWarn');
-  if (pwWarn && !localStorage.getItem('lh.hasPw')) pwWarn.classList.remove('hidden');
 
-  const setPwBtn = box.querySelector('#setPwBtn');
-  if (setPwBtn) {
-    const sendBtn = document.createElement('button');
-    sendBtn.className = 'btn btn-block';
-    sendBtn.style.marginTop = '14px';
-    sendBtn.textContent = '把这台设备的登录状态同步到另一台设备';
-    sendBtn.onclick = () => openRelaySend();
-    setPwBtn.parentElement.insertAdjacentElement('afterend', sendBtn);
-  }
-  if (setPwBtn) setPwBtn.onclick = async () => {
+  const paintPwVal = () => {
+    const has = localStorage.getItem('lh.hasPw') === '1';
+    const el = box.querySelector('#accPwVal');
+    if (el) { el.textContent = has ? '已设置' : '未设置'; el.classList.toggle('warn', !has); }
+    const warn = box.querySelector('#pwWarn');
+    if (warn) warn.classList.toggle('hidden', has);
+  };
+  paintPwVal();
+
+  box.querySelector('#relayBtn').onclick = () => openRelaySend();
+  box.querySelector('#setPwBtn').onclick = async () => {
     const a = box.querySelector('#newPw').value;
     const b = box.querySelector('#newPw2').value;
     const info = box.querySelector('#pwInfo');
@@ -388,8 +528,7 @@ export function openLogin() {
     try {
       await setPassword(a);
       localStorage.setItem('lh.hasPw', '1');
-      const warnEl = box.querySelector('#pwWarn');
-      if (warnEl) warnEl.classList.add('hidden');
+      paintPwVal();
       show('✓ 密码已设置，可在任意设备用邮箱+密码登录', 'form-ok');
       box.querySelector('#newPw').value = '';
       box.querySelector('#newPw2').value = '';
@@ -398,7 +537,7 @@ export function openLogin() {
     }
   };
 
-  box.querySelector('#doLogout').onclick = () => { DRAFT = null; logout(); m.hidden = true; location.reload(); };
+  box.querySelector('#doLogout').onclick = () => { DRAFT = null; DIRTY = false; logout(); m.hidden = true; location.reload(); };
 }
 
 export function refreshAuthButton() {

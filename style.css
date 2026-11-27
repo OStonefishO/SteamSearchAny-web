@@ -751,6 +751,48 @@ textarea.input { resize: vertical; min-height: 96px; }
 .pick-dot { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; }
 .pick-dot.on { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.25); }
 
+/* 账号面板：折叠条目（头像 / 主题色 / 登录密码默认收起，点标题才展开） */
+.acc { margin-top: 10px; border: 1px solid var(--line); border-radius: 12px; background: #0b131b; overflow: hidden; }
+.acc-head {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  padding: 11px 13px; border: 0; background: transparent; cursor: pointer;
+  color: var(--text-2); font-size: 12.5px; text-align: left;
+}
+.acc-head:hover { background: #101a24; }
+.acc-k { color: var(--text-3); letter-spacing: .04em; }
+.acc-v {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+  font-size: 12.5px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.acc-v em { font-style: normal; font-weight: 500; font-size: 12px; color: var(--text-3); }
+.acc-v.warn { color: var(--amber); }
+.acc-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255,255,255,.2); }
+.acc-act { margin-left: auto; font-size: 12px; color: var(--accent); }
+.acc-chev {
+  display: inline-block; width: 6px; height: 6px; margin: -3px 2px 0 4px;
+  border-right: 1.5px solid var(--text-3); border-bottom: 1.5px solid var(--text-3);
+  transform: rotate(45deg); transition: transform .18s ease;
+}
+.acc.open .acc-chev { transform: rotate(-135deg); margin-top: 1px; }
+.acc.open .acc-head { border-bottom: 1px solid var(--line); }
+.acc-body { padding: 12px 13px 14px; display: grid; gap: 8px; }
+.acc-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.acc-hint { font-size: 11.5px; color: var(--text-4); }
+.acc-body .pw-warn { margin: 0 0 2px; }
+
+.bio-meta { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; font-size: 11.5px; color: var(--text-4); }
+.bio-meta b { color: var(--text-3); font-weight: 600; }
+
+.save-row { display: flex; gap: 8px; margin-top: 16px; }
+.save-row .btn-primary { flex: 1; }
+.save-hint { margin-top: 8px; text-align: center; font-size: 11.5px; color: var(--amber); }
+
+@media (max-width: 620px) {
+  .acc-v { max-width: 46%; }
+  .acc-act { font-size: 11.5px; }
+}
+
 /* 社区发帖栏 */
 .cmt-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
 .cmt-hint { font-size: 12px; color: var(--text-4); }
