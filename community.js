@@ -1290,6 +1290,17 @@ function renderNotifs() {
     '<button id="notifClose">关闭</button></span></div>' +
     '<div class="notif-list">' + (NOTIFS.length ? NOTIFS.map(notifLine).join('') : '<div class="notif-empty">还没有通知</div>') + '</div>';
 
+  // 贴着邮件图标展开
+  const btn = document.getElementById('notifBtn');
+  if (btn) {
+    const r = btn.getBoundingClientRect();
+    const w = 340;
+    const left = Math.min(Math.max(8, r.left), window.innerWidth - w - 8);
+    panel.style.left = left + 'px';
+    panel.style.top = (r.bottom + 10) + 'px';
+    panel.style.width = w + 'px';
+  }
+
   const close = () => { notifOpen = false; panel.remove(); };
   panel.querySelector('#notifClose').onclick = close;
   const all = panel.querySelector('#notifAll');
@@ -1593,6 +1604,7 @@ export async function openFriends() {
           catch (e) { toast('失败'); }
         };
       });
+      paintChatUnread().catch(() => {});
       reqsEl.querySelectorAll('[data-cancel]').forEach((b) => {
         b.onclick = async () => {
           try { await rest('/rest/v1/' + FR + '?id=eq.' + b.dataset.cancel, { method: 'DELETE' }); loadAll(); }
@@ -1840,8 +1852,10 @@ export function openChat(peerEmail, peerName) {
   box.querySelector('#chatClose').onclick = close;
   box.querySelector('#chatBack').onclick = () => { close(); openFriends(); };
 
+  markChatRead(peerEmail);
   paintPresence();
   load();
+  setTimeout(() => { paintChatUnread().catch(() => {}); }, 600);
   timer = setInterval(() => { if (!closed) { load(); paintPresence(); } }, 5000);
 }
 
@@ -1866,3 +1880,42 @@ document.addEventListener('dblclick', (e) => {
   e.preventDefault();
   openLightbox(img.src);
 });
+
+
+/* ================= 消息未读 ================= */
+const READ_KEY = (peer) => 'lh.chatRead.' + peer;
+
+function markChatRead(peer) {
+  try { localStorage.setItem(READ_KEY(peer), String(Date.now())); } catch {}
+}
+
+async function unreadBySender() {
+  const me = currentEmail();
+  if (!me) return {};
+  try {
+    const rows = await rest('/rest/v1/messages?select=sender,created_at&receiver=eq.' + encodeURIComponent(me) + '&order=created_at.desc&limit=200') || [];
+    const out = {};
+    for (const r of rows) {
+      const last = Number(localStorage.getItem(READ_KEY(r.sender)) || 0);
+      if (new Date(r.created_at).getTime() > last) out[r.sender] = (out[r.sender] || 0) + 1;
+      else break;
+    }
+    return out;
+  } catch (e) {
+    return {};
+  }
+}
+
+export async function paintChatUnread() {
+  const map = await unreadBySender();
+  const total = Object.values(map).reduce((a, b) => a + b, 0);
+  floatBadge('friendsBtn', total);
+  // 好友列表里的红点
+  document.querySelectorAll('[data-chat]').forEach((btn) => {
+    const em = btn.dataset.chat;
+    const n = map[em] || 0;
+    const old = btn.querySelector('.chat-unread');
+    if (old) old.remove();
+    if (n > 0) btn.insertAdjacentHTML('beforeend', '<span class="chat-unread">' + (n > 9 ? '9+' : n) + '</span>');
+  });
+}

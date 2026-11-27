@@ -1055,3 +1055,25 @@ textarea.input { resize: vertical; min-height: 96px; }
   .fr-scroll { height: 150px; }
   .fr-acts .btn { padding: 0 8px; }
 }
+
+
+/* 好友行未读红点 */
+[data-chat] { position: relative; }
+.chat-unread {
+  position: absolute; top: -5px; right: -5px;
+  min-width: 15px; height: 15px; line-height: 15px; padding: 0 4px;
+  border-radius: 8px; background: #f4736f; color: #fff;
+  font-size: 9.5px; font-weight: 700; text-align: center;
+  box-shadow: 0 0 0 2px #0a1219;
+}
+
+/* 通知面板改为下拉式 */
+.notif-panel {
+  position: fixed; z-index: 9500;
+  max-height: 62vh; display: flex; flex-direction: column;
+  background: #0b141d; border: 1px solid var(--line-2); border-radius: 14px;
+  box-shadow: 0 30px 70px -30px #000; overflow: hidden;
+}
+@media (max-width: 600px) {
+  .notif-panel { left: 8px !important; width: calc(100vw - 16px) !important; }
+}
