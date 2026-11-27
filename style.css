@@ -708,3 +708,26 @@ textarea.input { resize: vertical; min-height: 96px; }
   .search-row .btn { padding: 0 16px; }
   .m-body { padding: 0 16px 20px; }
 }
+
+
+/* 顶栏小按钮自适应：文字不再竖排/挤压 */
+.icon-btn {
+  min-width: 44px;
+  max-width: 132px;
+  padding: 0 9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+
+/* 弹窗：给右上角关闭按钮和标题留出空间，避免标题被压 */
+.m-body { padding-top: 44px !important; }
+.m-body h3 { margin-top: 0; }
+.modal-close { z-index: 5; }
+
+/* 手机窄屏：顶栏按钮再收一点，保证一行放得下 */
+@media (max-width: 600px) {
+  .icon-btn { min-width: 38px; max-width: 92px; font-size: 11.5px; padding: 0 7px; }
+  .brand-name { font-size: 15px; }
+}
