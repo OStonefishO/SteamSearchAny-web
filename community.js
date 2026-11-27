@@ -322,24 +322,68 @@ export async function openComposer(game) {
       <div class="profile-mail">${game ? esc(game.name) : '自由分享'}</div></div>
     </div>
     <input class="input" id="postTitle" maxlength="40" placeholder="标题（一句话说明你想聊什么）">
-    ${game ? '' : '<input class="input" id="postGame" placeholder="关联的游戏名（可留空）" style="margin-top:8px">'}
+    ${game ? '' : '<div style="position:relative;margin-top:8px"><input class="input" id="postGame" placeholder="关联游戏（输入名字搜索）" autocomplete="off"><div id="gameSug" class="sugbox hidden"></div></div><div id="gamePicked" class="pickedwrap"></div>'}
     <textarea class="input" id="postBody" rows="5" placeholder="正文：说说这游戏怎么样？值得入吗？" style="margin-top:8px"></textarea>
     <button class="btn btn-primary btn-block" id="doPost" style="margin-top:10px">发布</button>
     <p id="postMsg" style="font-size:12px;color:var(--text-4);margin-top:8px"></p></div>`;
   const msg = box.querySelector('#postMsg');
+  let picked = game ? { id: game.id, name: game.name } : null;
+
+  const gi = box.querySelector('#postGame');
+  const sug = box.querySelector('#gameSug');
+  const pickedBox = box.querySelector('#gamePicked');
+  const renderPicked = () => {
+    if (!pickedBox) return;
+    pickedBox.innerHTML = picked
+      ? '<span class="picked">已关联：' + picked.name + ' <b data-clear="1">×</b></span>'
+      : '';
+    const clr = pickedBox.querySelector('[data-clear]');
+    if (clr) clr.onclick = () => { picked = null; renderPicked(); };
+  };
+  renderPicked();
+
+  if (gi) {
+    let timer = null;
+    gi.oninput = () => {
+      const q = gi.value.trim();
+      clearTimeout(timer);
+      if (q.length < 1) { sug.classList.add('hidden'); return; }
+      timer = setTimeout(async () => {
+        try {
+          const res = await fetch(new URL('api/search?q=' + encodeURIComponent(q), document.baseURI).href);
+          const data = await res.json();
+          const items = (data.items || []).slice(0, 6);
+          if (!items.length) { sug.innerHTML = '<div class="sug-empty">没找到</div>'; }
+          else {
+            sug.innerHTML = items.map((g) => '<div data-gid="' + g.id + '" data-gname="' + esc(g.name) + '">' + esc(g.name) + '<small>' + (g.year || '') + '</small></div>').join('');
+          }
+          sug.classList.remove('hidden');
+        } catch { sug.classList.add('hidden'); }
+      }, 180);
+    };
+    sug.onclick = (e) => {
+      const d = e.target.closest('[data-gid]');
+      if (!d) return;
+      picked = { id: Number(d.dataset.gid), name: d.dataset.gname };
+      gi.value = '';
+      sug.classList.add('hidden');
+      renderPicked();
+    };
+  }
+
   box.querySelector('#doPost').onclick = async () => {
     const body = box.querySelector('#postBody').value.trim();
     const title = (box.querySelector('#postTitle').value || '').trim().slice(0, 40);
     if (!title) return (msg.textContent = '给帖子起个标题吧');
     if (!body) return (msg.textContent = '写点正文吧');
-    const gname = game ? game.name : (box.querySelector('#postGame').value.trim() || '闲聊');
+    const gname = picked ? picked.name : '闲聊';
     msg.textContent = '发布中…';
     try {
       await rest('/rest/v1/posts', {
         method: 'POST',
         headers: { Prefer: 'return=representation' },
         body: [{
-          title, game_id: game ? game.id : 0, game_name: gname, body,
+          title, game_id: picked ? picked.id : 0, game_name: gname, body,
           author_name: p.name, author_id: p.id, author_avatar: p.img || p.avatar, author_email: currentEmail(),
         }],
       });
@@ -442,7 +486,7 @@ export async function renderCommunity(root) {
       <header>
         ${avatarHtml(av, 26)}
         <a class="post-author" data-author="${esc(x.author_name)}" data-aid="${x.author_id || ''}">${esc(x.author_name)}<span class="post-uid">#${x.author_id || '----'}</span></a>
-        ${x.game_id ? `<a class="post-game" href="?info=${x.game_id}">${esc(x.game_name)}</a>` : `<span class="post-game">${esc(x.game_name)}</span>`}
+        ${x.game_id ? `<a class="post-game" href="?info=${x.game_id}">${esc(x.game_name)}</a>` : `<span class="post-game plain">${esc(x.game_name)}</span>`}
         <span class="post-meta">${timeAgo(x.created_at)}</span>
         ${mine ? `<button class="post-del" data-del="${x.id}">删除</button>` : ''}
       </header>

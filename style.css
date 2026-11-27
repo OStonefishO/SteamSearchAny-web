@@ -770,3 +770,15 @@ textarea.input { resize: vertical; min-height: 96px; }
 .author-post b { font-size:14px }
 
 .post-uid { font-size:10.5px; color:var(--text-4); margin-left:5px; font-weight:400; letter-spacing:.02em }
+
+/* 发帖游戏搜索 */
+.sugbox{position:absolute;left:0;right:0;top:100%;z-index:20;margin-top:4px;background:#0c141d;border:1px solid var(--line-2);border-radius:10px;overflow:hidden;max-height:220px;overflow-y:auto}
+.sugbox.hidden{display:none}
+.sugbox div{padding:8px 12px;font-size:13px;border-bottom:1px solid var(--line);cursor:pointer}
+.sugbox div:hover{background:#13202c}
+.sugbox small{color:var(--text-4);margin-left:6px}
+.sug-empty{color:var(--text-4)}
+.pickedwrap{margin-top:6px}
+.picked{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 9px;border-radius:999px;background:rgba(76,194,255,.14);border:1px solid rgba(76,194,255,.35);color:#cfeaff}
+.picked b{cursor:pointer;color:#ffb04d}
+.post-game.plain{color:var(--text-3);cursor:default}
