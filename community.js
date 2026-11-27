@@ -836,11 +836,22 @@ async function renderDetail(root) {
 
   const cmtList = root.querySelector('#cmtList');
   try {
-    const cs = await rest('/rest/v1/comments?select=id,body,author_name,author_email,created_at&post_id=eq.' + x.id + '&order=created_at.asc') || [];
+    const cs = await rest('/rest/v1/comments?select=id,body,author_name,author_id,author_email,created_at&post_id=eq.' + x.id + '&order=created_at.asc') || [];
+
+    // 补 UID：老评论没有 author_id 时，按邮箱从 profiles 里查
+    const emailSet = Array.from(new Set((cs || []).map((c) => c.author_email).filter(Boolean)));
+    const uidByEmail = {};
+    if (emailSet.length) {
+      try {
+        const ps = await rest('/rest/v1/profiles?select=user_email,uid&user_email=in.(' + emailSet.map((e) => '"' + e + '"').join(',') + ')');
+        for (const p of ps || []) uidByEmail[p.user_email] = p.uid;
+      } catch (e) {}
+    }
     cmtList.innerHTML = cs.map((cm) => {
       const canDelC = currentEmail() && cm.author_email === currentEmail();
       return '<div class="cmt" data-cid="' + cm.id + '"' + (canDelC ? ' data-mine="1"' : '') + '>' +
-        '<b class="cmt-author" data-name="' + esc(cm.author_name) + '">' + esc(cm.author_name) + '</b> ' +
+        '<b class="cmt-author" data-name="' + esc(cm.author_name) + '" data-uid="' + (cm.author_id || uidByEmail[cm.author_email] || '') + '">' + esc(cm.author_name) +
+        (cm.author_id || uidByEmail[cm.author_email] ? '<span class="post-uid">#' + (cm.author_id || uidByEmail[cm.author_email]) + '</span>' : '') + '</b> ' +
         esc(cm.body) +
         '<span class="cmt-time">' + timeAgo(cm.created_at) + '</span>' +
         '</div>';
@@ -848,7 +859,7 @@ async function renderDetail(root) {
     cmtList.querySelectorAll('.cmt-author').forEach((el) => {
       el.onclick = (ev) => {
         ev.stopPropagation();
-        openCmtMenu(ev, el.dataset.name, root, cmtList.querySelector('#cmtInput'));
+        openCmtMenu(ev, el.dataset.name, root, cmtList.querySelector('#cmtInput'), el.dataset.uid);
       };
     });
 
@@ -874,7 +885,7 @@ async function renderDetail(root) {
       const v = root.querySelector('#cmtInput').value.trim();
       if (!v) return;
       try {
-        await rest('/rest/v1/comments', { method: 'POST', body: [{ post_id: x.id, body: v, author_name: profile().name, author_email: currentEmail() }] });
+        await rest('/rest/v1/comments', { method: 'POST', body: [{ post_id: x.id, body: v, author_name: profile().name, author_id: profile().id, author_email: currentEmail() }] });
         notifyComment(x, v).catch(() => {});
         renderDetail(root);
       } catch (e) { toast('评论失败'); }
@@ -1088,7 +1099,7 @@ try {
 
 
 /* ================= 评论作者菜单 ================= */
-function openCmtMenu(ev, name, root, inputEl) {
+function openCmtMenu(ev, name, root, inputEl, uid) {
   document.querySelectorAll('.cmt-menu').forEach((n) => n.remove());
   const menu = document.createElement('div');
   menu.className = 'cmt-menu';
@@ -1107,7 +1118,7 @@ function openCmtMenu(ev, name, root, inputEl) {
     const act = e.target.closest('[data-act]');
     if (!act) return;
     if (act.dataset.act === 'home') {
-      openAuthor(name, null);
+      openAuthor(name, uid || null);
     } else {
       const input = document.querySelector('#cmtInput');
       if (input) {
@@ -1273,4 +1284,5 @@ try {
   };
   if (!bindBtn()) setTimeout(bindBtn, 600);
   setTimeout(() => { refreshNotifs().catch(() => {}); }, 1200);
+  setTimeout(() => { syncProfile().then(() => refreshAuthButton()).catch(() => {}); }, 600);
 } catch (e) {}
