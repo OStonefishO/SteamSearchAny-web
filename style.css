@@ -1220,3 +1220,14 @@ textarea.input { resize: vertical; min-height: 96px; }
   .modal-body:has(.chat-mode) { width: 96vw !important; max-width: 96vw !important; }
   .msg { max-width: 92%; }
 }
+
+
+/* 禁止横向滚动（好友面板等） */
+.modal-body { overflow-x: hidden; }
+#modalContent { overflow-x: hidden; }
+#friendBody { overflow-x: hidden; }
+.fr-sec { overflow: hidden; }
+.fr-row { margin-left: 0; margin-right: 0; }
+.fr-info { min-width: 0; }
+.fr-sub { max-width: 100%; }
+.cmt-bar { flex-wrap: wrap; }

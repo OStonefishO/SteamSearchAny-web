@@ -1321,11 +1321,15 @@ function boot() {
 
   (async () => {
     const gameParam = Number(new URLSearchParams(location.search).get('game'));
+  if (Number.isFinite(gameParam) && gameParam > 0) { try { setTimeout(() => history.replaceState(null, '', location.pathname), 400); } catch {} }
     const fromLink = await applyDeepLink();
     if (!fromLink) roll();
     if (Number.isFinite(gameParam) && gameParam > 0) openDetail({ id: gameParam, name: '载入中…' });
     const infoParam = Number(new URLSearchParams(location.search).get('info'));
-    if (Number.isFinite(infoParam) && infoParam > 0) openInfo({ id: infoParam, name: '载入中…' });
+    if (Number.isFinite(infoParam) && infoParam > 0) {
+    openInfo({ id: infoParam, name: '载入中…' });
+    try { history.replaceState(null, '', location.pathname); } catch {}
+  }
   })();
 }
 
