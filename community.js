@@ -500,7 +500,16 @@ async function renderList(root) {
   try {
     posts = await rest(`/rest/v1/posts?select=id,title,game_id,game_name,body,images,author_name,author_id,author_avatar,author_email,created_at&order=created_at.desc&limit=${size}&offset=${PAGE * size}`) || [];
   } catch (e) {
-    list.innerHTML = `<div class="empty-state">读取失败：${esc(e.message)}</div>`;
+    const msg = String(e.message || e);
+    if (/JWT|expired|401/i.test(msg)) {
+      try { localStorage.removeItem('lh.auth'); } catch {}
+      list.innerHTML = '<div class="empty-state">登录已过期<br><span style="font-size:12px;color:var(--text-4)">重新登录后即可恢复</span><br><br>' +
+        '<button class="btn btn-primary" id="relogin">重新登录</button></div>';
+      const b = list.querySelector('#relogin');
+      if (b) b.onclick = () => openLogin();
+      return;
+    }
+    list.innerHTML = '<div class="empty-state">读取失败：' + esc(msg) + '</div>';
     return;
   }
 

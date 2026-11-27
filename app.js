@@ -755,7 +755,7 @@ async function openInfo(g) {
     runSimilar();
   });
   $('#infoShare', content)?.addEventListener('click', () => {
-    import('./community.js').then((m) => m.openComposer(full));
+    import('./community.js?v=' + (window.__LH_BUILD || '1')).then((m) => m.openComposer(full));
   });
 
   $('#infoDetail', content)?.addEventListener('click', () => openDetail(full));
@@ -789,7 +789,7 @@ function switchView(view) {
   $('#view-events')?.classList.toggle('hidden', view !== 'events');
   $('#view-community')?.classList.toggle('hidden', view !== 'community');
   if (view === 'community') {
-    import('./community.js').then((m) => m.renderCommunity($('#communityBody'))).catch((e) => {
+    import('./community.js?v=' + (window.__LH_BUILD || '1')).then((m) => m.renderCommunity($('#communityBody'))).catch((e) => {
       $('#communityBody').innerHTML = '<div class="empty-state">社区加载失败：' + e.message + '</div>';
     });
   }
@@ -1297,10 +1297,10 @@ function boot() {
   window.LH_TOAST = toast;
   window.LH_COMMUNITY_REFRESH = () => {
     if (state.view === 'community') {
-      import('./community.js').then((m) => m.renderCommunity($('#communityBody')));
+      import('./community.js?v=' + (window.__LH_BUILD || '1')).then((m) => m.renderCommunity($('#communityBody')));
     }
   };
-  import('./community.js').then((m) => {
+  import('./community.js?v=' + (window.__LH_BUILD || '1')).then((m) => {
     const btn = $('#authBtn');
     if (btn) {
       m.refreshAuthButton();
