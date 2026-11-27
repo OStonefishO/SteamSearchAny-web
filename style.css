@@ -1008,3 +1008,16 @@ textarea.input { resize: vertical; min-height: 96px; }
 @media (max-width: 600px) {
   .open-hint { font-size: 12px; white-space: normal; }
 }
+
+
+/* 好友面板 */
+.fr-sec { margin-bottom: 18px; }
+.fr-t { font-size: 12px; color: var(--text-4); letter-spacing: .04em; margin-bottom: 8px; }
+.fr-row {
+  display: flex; align-items: center; gap: 10px; padding: 9px 10px;
+  border-radius: 10px; background: #0a121a; border: 1px solid var(--line); margin-bottom: 8px;
+}
+.fr-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.fr-info b { font-size: 13px; }
+.fr-sub { font-size: 11.5px; color: var(--text-4); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fr-empty { font-size: 12.5px; color: var(--text-4); padding: 8px 2px; }
