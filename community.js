@@ -1608,6 +1608,25 @@ export async function renderMe(root) {
 
   // 帖子数：进页面就先查一次，别等切到「我的帖子」才更新
   if (mail) {
+    const setTxt = (id, v) => {
+      const el = root.querySelector('#' + id);
+      if (el) el.textContent = String(v);
+    };
+    // 留言 / 图片 / 主页赞 也一起预取，别让统计条一直挂「—」
+    loadWall(mail).then((rows) => {
+      if (!alive) return;
+      setTxt('meWallN', rows.length);
+      setTxt('meWallC', rows.length);
+    }).catch(() => {});
+    loadPhotos(mail).then((rows) => {
+      if (!alive) return;
+      setTxt('mePhotoN', rows.length);
+      setTxt('mePhotoC', rows.length);
+    }).catch(() => {});
+    loadProfileLikes(mail).then((info) => {
+      if (!alive) return;
+      setTxt('meLikeN', info.count);
+    }).catch(() => {});
     rest('/rest/v1/posts?select=id&author_email=eq.' + encodeURIComponent(mail) + '&limit=200')
       .then((rows) => {
         if (!alive || postRows) return;
