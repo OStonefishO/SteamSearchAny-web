@@ -3045,15 +3045,22 @@ async function buildGameShot(g) {
   // 头部图（Steam CDN 带 CORS 才画，拿不到就渐变兜底，绝不让 canvas 变 tainted）
   const img = await loadImageCors(g.header || 'https://cdn.akamai.steamstatic.com/steam/apps/' + g.id + '/header.jpg');
   if (img && img.width) {
+    // 先裁剪到头部区域：cover 缩放会让图比 300 高，不裁就会溢出到正文里形成一条"黑线/黑带"
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, W, headerH);
+    ctx.clip();
     const ratio = Math.max(W / img.width, headerH / img.height);
     const dw = img.width * ratio;
     const dh = img.height * ratio;
     ctx.drawImage(img, (W - dw) / 2, (headerH - dh) / 2, dw, dh);
-    const fade = ctx.createLinearGradient(0, headerH - 130, 0, headerH);
+    // 底部渐隐到画布底色，跟正文无缝衔接
+    const fade = ctx.createLinearGradient(0, headerH - 150, 0, headerH);
     fade.addColorStop(0, 'rgba(11,17,25,0)');
     fade.addColorStop(1, '#0b1119');
     ctx.fillStyle = fade;
-    ctx.fillRect(0, headerH - 130, W, 130);
+    ctx.fillRect(0, headerH - 150, W, 150);
+    ctx.restore();
   } else {
     const grad = ctx.createLinearGradient(0, 0, W, headerH);
     grad.addColorStop(0, '#12212d');
