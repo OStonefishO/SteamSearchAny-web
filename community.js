@@ -89,13 +89,14 @@ async function rest(path, opts = {}, retried = false) {
   const isWrite = method !== 'GET';
   let s = session();
 
-  // 写操作前：有 email 却没 token（比如同步过来的会话只存了邮箱），先换一次 token，
-  // 否则请求会带着 publishable key 发出去 = 以 anon 身份写 → RLS 400/42501，看起来像"策略坏了"
-  if (isWrite && s && s.email && !s.access_token) {
+  // 任何请求前：有 email 却没 token（同步过来的会话只存了邮箱），先换一次 token，
+  // 否则请求会带着 publishable key 发出去 = 以 anon 身份读写 → 写被 RLS 拒、读被 RLS 过滤成空数组
+  if (s && s.email && !s.access_token) {
     if (await tryRefreshToken()) s = session();
   }
 
   const authed = !!s?.access_token;
+  window.__lhLastAuth = authed ? '已登录 ' + (s?.email || '') : '匿名';
   const res = await fetch(cfg.url + path, {
     method,
     headers: {
@@ -827,7 +828,7 @@ export async function openAuthor(name, uid) {
           </div>
           ${me && (w.author_email === me || target === me) && !w.tmp ? `<button class="wall-del" data-wdel="${w.id}" title="删除">×</button>` : ''}
         </div>`).join('') : '<div class="me-empty">还没有人留言，来抢第一条</div>'}</div>
-      <p class="wall-note" id="wallNote" hidden>这条已经提交到云端了，但读回来是空的 —— 给 wall_messages 加一条 select 策略（见 db/fix-rls-email.sql）</p>
+      <p class="wall-note" id="wallNote" hidden></p>
     </div>`;
 
     const sendBtn = pane.querySelector('#wallSend');
@@ -857,7 +858,13 @@ export async function openAuthor(name, uid) {
               if (fresh && fresh.length) { paintWall(fresh); syncWallCounts(); }
               else {
                 const note = pane.querySelector('#wallNote');
-                if (note) note.hidden = false;
+                if (note) {
+                  const idt = window.__lhLastAuth || '未知';
+                  note.textContent = /匿名/.test(idt)
+                    ? '这条提交成功了，但读取时是「' + idt + '」身份 —— 登录状态掉了，退出后重新登录一次就能看到'
+                    : '这条已经提交到云端了，但读回来是空的（读取身份：' + idt + '）—— 给 wall_messages 加一条 select 策略（见 db/fix-rls-email.sql）';
+                  note.hidden = false;
+                }
               }
             })
             .catch(() => {});
