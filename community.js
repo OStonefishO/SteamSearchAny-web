@@ -186,7 +186,7 @@ export function openLogin() {
   box.querySelector('#uploadBtn').onclick = () => box.querySelector('#fileIn').click();
   box.querySelector('#fileIn').onchange = (e) => {
     const f = e.target.files && e.target.files[0];
-    if (f) openAvatarEditor(f, (dataUrl) => { DRAFT = { ...(DRAFT || profile()), img: dataUrl }; });
+    if (f) openAvatarEditor(f, (dataUrl) => { DRAFT = { ...(DRAFT || profile()), img: dataUrl }; saveProfile(DRAFT); refreshAuthButton(); toast('头像已保存'); });
   };
   box.querySelector('#clearImg').onclick = () => { draft.img = ''; preview(); };
   box.querySelector('#pAvatars').onclick = (e) => {
@@ -335,7 +335,7 @@ export async function renderCommunity(root) {
   }
 
   list.innerHTML = posts.map((x) => {
-    const mine = currentEmail() && x.author_email === currentEmail();
+    const mine = currentEmail() && (x.author_email === currentEmail() || (!x.author_email && x.author_name === profile().name));
     const av = { name: x.author_name, avatar: (x.author_avatar || '').startsWith('data:') ? '' : (x.author_avatar || '🎮'), img: (x.author_avatar || '').startsWith('data:') ? x.author_avatar : '', color: '#45bdf7' };
     const cs = byPost.get(x.id) || [];
     return `<article class="post">
