@@ -361,14 +361,15 @@ export function openLogin() {
     refreshAuthButton();
     toast('资料已保存');
   };
-  const sendBtn = document.createElement('button');
-  sendBtn.className = 'btn btn-block';
-  sendBtn.style.marginTop = '14px';
-  sendBtn.textContent = '把这台设备的登录状态同步到电脑';
-  sendBtn.onclick = () => openRelaySend();
-  setPwBtn.parentElement.parentElement.insertBefore(sendBtn, setPwBtn.parentElement.nextSibling);
-
   const setPwBtn = box.querySelector('#setPwBtn');
+  if (setPwBtn) {
+    const sendBtn = document.createElement('button');
+    sendBtn.className = 'btn btn-block';
+    sendBtn.style.marginTop = '14px';
+    sendBtn.textContent = '把这台设备的登录状态同步到另一台设备';
+    sendBtn.onclick = () => openRelaySend();
+    setPwBtn.parentElement.insertAdjacentElement('afterend', sendBtn);
+  }
   if (setPwBtn) setPwBtn.onclick = async () => {
     const pw = box.querySelector('#newPw').value;
     const info = box.querySelector('#pwInfo');
