@@ -108,7 +108,7 @@ async function apiUpsertProfile(p) {
   await rest('/rest/v1/profiles', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-    body: [{ user_email: email, uid: p.id, name: p.name, avatar: p.img || p.avatar, color: p.color, updated_at: new Date().toISOString() }],
+    body: [{ user_email: email, uid: p.id, name: p.name, avatar: p.img || p.avatar, color: p.color, bio: p.bio || '', updated_at: new Date().toISOString() }],
   });
 }
 export async function syncProfile() {
@@ -124,6 +124,7 @@ export async function syncProfile() {
         avatar: (remote.avatar || '').startsWith('data:') ? local.avatar : (remote.avatar || local.avatar),
         img: (remote.avatar || '').startsWith('data:') ? remote.avatar : (local.img || ''),
         color: remote.color || local.color,
+        bio: remote.bio || local.bio || '',
       };
       saveProfile(merged);
       return merged;
@@ -302,6 +303,9 @@ export function openLogin() {
       <div class="profile-mail">${esc(email)} · UID #${p.id}</div></div></div>
     <label class="field-label">昵称</label>
     <input class="input" id="pName" maxlength="16" value="${esc(p.name)}">
+    <label class="field-label">个人简介（别人点进你的主页能看到）</label>
+    <textarea class="input" id="pBio" rows="2" maxlength="120" placeholder="一句话介绍自己，留空会显示「这个人懒得写简介」"></textarea>
+
     <label class="field-label">上传头像（可缩放）</label>
     <div style="display:flex;gap:8px;align-items:center">
       <button class="btn" id="uploadBtn">选择图片</button>
@@ -327,6 +331,8 @@ export function openLogin() {
     </div></div>`;
 
   const draft = DRAFT;
+  const bioEl = box.querySelector('#pBio');
+  if (bioEl) bioEl.value = DRAFT.bio || '';
   const preview = () => { const el = box.querySelector('#avatarPreview'); if (el) el.innerHTML = avatarHtml(draft, 56); };
   box.querySelector('#uploadBtn').onclick = () => box.querySelector('#fileIn').click();
   box.querySelector('#fileIn').onchange = (e) => {
@@ -350,6 +356,7 @@ export function openLogin() {
   };
   box.querySelector('#pSave').onclick = () => {
     draft.name = (box.querySelector('#pName').value || '').trim().slice(0, 16) || email.split('@')[0];
+    draft.bio = (box.querySelector('#pBio').value || '').trim().slice(0, 120);
     saveProfile(draft);
     apiUpsertProfile(draft).catch(() => {});
     refreshOwnPosts(draft).catch(() => {});
@@ -526,17 +533,60 @@ export async function openAuthor(name, uid) {
   try {
     const filter = uid ? `author_id=eq.${uid}` : `author_name=eq.${encodeURIComponent(name)}`;
     const rows = await rest(`/rest/v1/posts?select=id,title,game_name,body,author_avatar,author_id,created_at&` + filter + `&order=created_at.desc&limit=20`);
+
+    let prof = null;
+    try {
+      const q = uid ? `uid=eq.${uid}` : `name=eq.${encodeURIComponent(name)}`;
+      const ps = await rest('/rest/v1/profiles?select=user_email,uid,name,bio,avatar&' + q + '&limit=1');
+      prof = ps && ps[0];
+    } catch (e) {}
+    const bioText = (prof && prof.bio) ? prof.bio : '这个人懒得写简介';
     const av = rows[0]?.author_avatar || '🎮';
     box.innerHTML = `<div class="m-body">
       <div class="profile-head">${avatarHtml({ avatar: av.startsWith('data:') ? '🎮' : av, img: av.startsWith('data:') ? av : '' }, 56)}
         <div><div class="profile-name">${esc(name)}<span class="post-uid">#${uid || (rows[0] && rows[0].author_id) || '----'}</span></div>
         <div class="profile-mail">${rows.length} 篇帖子</div></div></div>
+      <p class="author-bio">${esc(bioText)}</p>
+      <div id="friendSlot"></div>
       ${rows.map((x) => `<div class="author-post"><b>${esc(x.title || '无标题')}</b>
         <div class="post-meta">${esc(x.game_name)} · ${timeAgo(x.created_at)}</div>
         <p class="post-body" style="margin:6px 0 0">${esc(x.body)}</p></div>`).join('')}</div>`;
   } catch (e) {
     box.innerHTML = `<div class="m-body"><h3>${esc(name)}</h3><p style="color:var(--text-3)">读取失败：${esc(e.message)}</p></div>`;
+    return;
   }
+
+  // 好友按钮
+  const slot = box.querySelector('#friendSlot');
+  const me = currentEmail();
+  const target = prof && prof.user_email;
+  if (!slot || !me || !target || target === me) return;
+  try {
+    const rel = await rest('/rest/v1/friends?select=a_email&a_email=eq.' + encodeURIComponent(me) + '&b_email=eq.' + encodeURIComponent(target));
+    const isFriend = rel && rel.length > 0;
+    slot.innerHTML = '<button class="btn ' + (isFriend ? '' : 'btn-primary') + '" id="friendBtn">' + (isFriend ? '✓ 已是好友' : '＋ 加为好友') + '</button>';
+    const btn = slot.querySelector('#friendBtn');
+    if (isFriend) {
+      btn.onclick = async () => {
+        if (!confirm('解除好友关系？')) return;
+        try {
+          await rest('/rest/v1/friends?a_email=eq.' + encodeURIComponent(me) + '&b_email=eq.' + encodeURIComponent(target), { method: 'DELETE' });
+          await rest('/rest/v1/friends?a_email=eq.' + encodeURIComponent(target) + '&b_email=eq.' + encodeURIComponent(me), { method: 'DELETE' });
+          toast('已解除');
+          openAuthor(name, uid);
+        } catch (e) { toast('失败'); }
+      };
+    } else {
+      btn.onclick = async () => {
+        btn.disabled = true;
+        try {
+          await rest('/rest/v1/friends', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' }, body: [{ a_email: me, b_email: target }, { a_email: target, b_email: me }] });
+          toast('已加为好友');
+          openAuthor(name, uid);
+        } catch (e) { toast('失败：' + e.message); btn.disabled = false; }
+      };
+    }
+  } catch (e) {}
 }
 
 function toast(t) { if (window.LH_TOAST) return window.LH_TOAST(t); }
