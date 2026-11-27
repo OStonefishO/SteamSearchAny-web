@@ -804,3 +804,20 @@ textarea.input { resize: vertical; min-height: 96px; }
 @media (max-width: 620px) {
   .btn-download { height: 32px; padding: 0 9px; font-size: 11.5px; }
 }
+
+
+/* 下载客户端：暂未开放 */
+.btn-soon {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 34px; padding: 0 14px; border-radius: 10px;
+  font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  color: var(--text-4);
+  background: #0f1a24; border: 1px dashed var(--line-2);
+  cursor: default;
+}
+
+/* 左上角的设置按钮：和品牌同一行，深色不抢眼 */
+.brand + #uiBtn, #uiBtn { margin-left: 4px; }
+@media (max-width: 760px) {
+  .btn-soon { padding: 0 10px; font-size: 11.5px; }
+}
