@@ -633,10 +633,16 @@ function reactionHtml(postId, counts, mine, big) {
     return '<button class="react ' + cls + ex + ' ' + on + '" data-react="' + r.k + '" title="' + r.t + '">' +
       '<span class="emo">' + r.e + '</span>' + (n ? '<b>' + n + '</b>' : '') + '</button>';
   };
-  const main = REACT.slice(0, 2).map((r) => btn(r, false)).join('');
-  const rest = REACT.slice(2).map((r) => btn(r, true)).join('');
+  const base = REACT.slice(0, 2);
+  const rest = REACT.slice(2);
+  // 常驻：赞/踩 + 已经有人用过的表情
+  const persistent = base.concat(rest.filter((r) => (counts[r.k] || 0) > 0 || mine.has(r.k)));
+  // 扩展：还没人用过的表情
+  const extras = rest.filter((r) => !((counts[r.k] || 0) > 0 || mine.has(r.k)));
+
   return '<div class="react-row" data-pid="' + postId + '">' +
-    main + rest +
+    persistent.map((r) => btn(r, false)).join('') +
+    extras.map((r) => btn(r, true)).join('') +
     '<button class="react-plus ' + cls + '" data-more="1" title="更多心情">＋</button>' +
     '</div>';
 }
@@ -659,12 +665,24 @@ function bindReactions(scope, root) {
       else if (next) btn.insertAdjacentHTML('beforeend', '<b>' + next + '</b>');
       popEmoji(btn, btn.querySelector('.emo').textContent);
 
+      const wasExtra = btn.classList.contains('react-extra-item');
       try {
         const email = currentEmail();
         if (wasOn) {
           await rest('/rest/v1/post_likes?post_id=eq.' + postId + '&user_email=eq.' + encodeURIComponent(email) + '&kind=eq.' + kind, { method: 'DELETE' });
         } else {
           await rest('/rest/v1/post_likes', { method: 'POST', body: [{ post_id: postId, user_email: email, kind }] });
+        }
+        // 成功：如果是新用过的表情，留在点踩后面并收起扩展区
+        if (wasExtra) {
+          btn.classList.remove('react-extra-item');
+          const row = btn.closest('.react-row');
+          const plus = row.querySelector('[data-more]');
+          if (plus) row.insertBefore(btn, plus);
+          if (row) {
+            row.classList.remove('expanded');
+            if (plus) plus.textContent = '＋';
+          }
         }
       } catch (e) {
         btn.classList.toggle('on', wasOn);
