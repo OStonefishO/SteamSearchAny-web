@@ -585,10 +585,9 @@ function reactionHtml(postId, counts, mine, big) {
   const main = REACT.slice(0, 2).map(btn).join('');
   const rest = REACT.slice(2).map(btn).join('');
   return '<div class="react-row" data-pid="' + postId + '">' +
-    '<div class="react-main">' + main +
+    main +
+    '<div class="react-extra hidden">' + rest + '</div>' +
     '<button class="react-plus ' + cls + '" data-more="1" title="更多心情">＋</button>' +
-    '</div>' +
-    '<div class="react-pop hidden"><div class="react-grid">' + rest + '</div></div>' +
     '</div>';
 }
 
@@ -629,10 +628,11 @@ function bindReactions(scope, root) {
     btn.onclick = (ev) => {
       ev.stopPropagation();
       const row = btn.closest('.react-row');
-      const pop = row.querySelector('.react-pop');
-      const isHidden = pop.classList.contains('hidden');
-      scope.querySelectorAll('.react-pop').forEach((p) => p.classList.add('hidden'));
-      if (isHidden) pop.classList.remove('hidden');
+      const extra = row.querySelector('.react-extra');
+      const opened = !extra.classList.contains('hidden');
+      scope.querySelectorAll('.react-extra').forEach((el) => el.classList.add('hidden'));
+      if (!opened) extra.classList.remove('hidden');
+      btn.textContent = opened ? '＋' : '－';
     };
   });
   if (!scope.__reactOutsideBound) {

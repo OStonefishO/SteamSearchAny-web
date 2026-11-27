@@ -863,55 +863,39 @@ textarea.input { resize: vertical; min-height: 96px; }
 
 
 /* 互动条 */
-.react-row { display: block; margin: 10px 0 4px; position: relative; }
-.react-main {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 5px; border-radius: 14px;
-  background: #0b131b; border: 1px solid var(--line);
+.react-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin: 12px 0 2px;
 }
+.react-extra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.react-extra.hidden { display: none; }
+
 .react {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  min-width: 52px; height: 40px; padding: 0 12px; border-radius: 11px;
+  min-width: 54px; height: 42px; padding: 0 13px; border-radius: 12px;
   background: #0f1c27; border: 1px solid var(--line-2);
   color: var(--text-3); font-size: 13px; cursor: pointer;
   transition: transform .12s, border-color .12s, background .12s;
 }
-.react .emo { font-size: 22px; line-height: 1; }
-.react b { font-weight: 800; font-size: 13px; letter-spacing: .01em; }
+.react .emo { font-size: 23px; line-height: 1; }
+.react b { font-weight: 800; font-size: 13px; }
 .react:hover { border-color: var(--accent); background: #12222e; }
 .react.on { border-color: var(--accent); background: rgba(69,189,247,.16); color: #d6eeff; }
-.react.on b { color: #eaf7ff; }
 .react.pop { transform: scale(1.22); }
 
 .react-plus {
-  width: 40px; height: 40px; display: grid; place-items: center;
-  border-radius: 11px; background: #0a141d;
+  width: 42px; height: 42px; display: grid; place-items: center;
+  border-radius: 12px; background: #0a141d;
   border: 1px dashed var(--line-2); color: var(--text-3);
-  font-size: 19px; cursor: pointer; margin-left: 2px;
+  font-size: 20px; cursor: pointer;
   transition: border-color .12s, color .12s, background .12s;
 }
 .react-plus:hover { border-color: var(--accent); color: var(--accent); background: #10202c; }
-.react-plus.react-lg { width: 46px; height: 46px; font-size: 21px; }
+.react-plus.react-lg { width: 48px; height: 48px; font-size: 22px; }
 
-.react-lg { height: 46px; min-width: 60px; padding: 0 15px; }
-.react-lg .emo { font-size: 26px; }
+.react-lg { height: 48px; min-width: 62px; padding: 0 16px; }
+.react-lg .emo { font-size: 27px; }
 .react-lg b { font-size: 14px; }
-
-.react-pop {
-  position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 30;
-  padding: 10px; border-radius: 16px;
-  background: #0c141d; border: 1px solid var(--line-2);
-  box-shadow: 0 24px 50px -24px #000;
-}
-.react-pop.hidden { display: none; }
-.react-grid { display: grid; grid-template-columns: repeat(6, 44px); gap: 8px; }
-.react-grid .react {
-  width: 44px; min-width: 44px; height: 44px; padding: 0;
-  flex-direction: column; gap: 1px; border-radius: 12px;
-}
-.react-grid .react .emo { font-size: 20px; }
-.react-grid .react b { font-size: 10px; font-weight: 700; color: var(--text-4); }
-.react-grid .react.on b { color: #cfeaff; }
 
 .float-emoji {
   position: fixed; transform: translate(-50%, 0); pointer-events: none;
@@ -924,12 +908,6 @@ textarea.input { resize: vertical; min-height: 96px; }
   100% { opacity: 0; transform: translate(-50%, -78px) scale(1); }
 }
 
-
-/* 列表里的评论预览 */
-.cmt-preview { margin: 10px 0 2px; padding: 10px 12px; border-radius: 10px; background: #0a121a; border: 1px solid var(--line); }
-.cmt-line { font-size: 12.5px; color: var(--text-2); line-height: 1.65; }
-.cmt-line b { color: var(--text); font-weight: 700; margin-right: 4px; }
-.cmt-line + .cmt-line { margin-top: 2px; }
-.cmt-more { margin-top: 6px; font-size: 12px; color: var(--accent); }
-.open-hint { margin-left: auto; font-size: 12px; color: var(--text-4); }
+/* 查看详情提示放大 */
+.open-hint { margin-left: auto; font-size: 13.5px; color: var(--text-3); font-weight: 600; }
 .post-clickable:hover .open-hint { color: var(--accent); }
