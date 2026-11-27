@@ -583,15 +583,18 @@ async function renderList(root) {
       ev.stopPropagation();
       if (!currentEmail()) return openLogin();
       const id = Number(btn.dataset.like);
-      const on = btn.classList.contains('on');
-      btn.disabled = true;
+      const wasOn = btn.classList.contains('on');
+      const cur = Number((btn.textContent.match(/\d+/) || [0])[0]) || 0;
+      const next = wasOn ? Math.max(0, cur - 1) : cur + 1;
+      btn.classList.toggle('on', !wasOn);
+      btn.innerHTML = (wasOn ? '♡' : '♥') + (next ? ' ' + next : '');
       try {
-        if (on) await rest(`/rest/v1/post_likes?post_id=eq.${id}&user_email=eq.${encodeURIComponent(currentEmail())}`, { method: 'DELETE' });
+        if (wasOn) await rest(`/rest/v1/post_likes?post_id=eq.${id}&user_email=eq.${encodeURIComponent(currentEmail())}`, { method: 'DELETE' });
         else await rest('/rest/v1/post_likes', { method: 'POST', body: [{ post_id: id, user_email: currentEmail() }] });
-        renderList(root);
       } catch (e) {
+        btn.classList.toggle('on', wasOn);
+        btn.innerHTML = (wasOn ? '♥' : '♡') + (cur ? ' ' + cur : '');
         toast('操作失败：' + e.message);
-        btn.disabled = false;
       }
     };
   });
@@ -609,6 +612,8 @@ async function renderDetail(root) {
   const imgs = Array.isArray(x.images) ? x.images : [];
   root.innerHTML = `<div class="cmt-bar">
       <button class="btn" id="backBtn">← 返回社区</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-sm" id="delPost" style="display:none">删除帖子</button>
     </div>
     <article class="post">
       <header>${avatarHtml(av, 34)}
@@ -628,6 +633,27 @@ async function renderDetail(root) {
     </article>`;
 
   root.querySelector('#backBtn').onclick = () => { VIEW = 'list'; CUR = null; renderCommunity(root); };
+
+  const delBtn = root.querySelector('#delPost');
+  const emailNow = currentEmail();
+  const canDel = emailNow && (x.author_email === emailNow || (!x.author_email && x.author_name === profile().name));
+  if (delBtn && canDel) {
+    delBtn.style.display = '';
+    delBtn.onclick = async () => {
+      if (!confirm('删除这条帖子？')) return;
+      delBtn.disabled = true;
+      try {
+        await rest('/rest/v1/posts?id=eq.' + x.id, { method: 'DELETE' });
+        toast('已删除');
+        VIEW = 'list';
+        CUR = null;
+        renderCommunity(root);
+      } catch (e) {
+        toast('删除失败：' + e.message);
+        delBtn.disabled = false;
+      }
+    };
+  }
   root.querySelector('[data-author]').onclick = () => openAuthor(x.author_name, x.author_id);
 
   // 点赞
@@ -640,11 +666,17 @@ async function renderDetail(root) {
       if (!email) return openLogin();
       const btn = ev.currentTarget;
       btn.disabled = true;
+      const next = liked ? Math.max(0, ls.length - 1) : ls.length + 1;
+      btn.classList.toggle('on', !liked);
+      btn.innerHTML = (liked ? '♡' : '♥') + (next ? ' ' + next : '');
       try {
         if (liked) await rest(`/rest/v1/post_likes?post_id=eq.${x.id}&user_email=eq.${encodeURIComponent(email)}`, { method: 'DELETE' });
         else await rest('/rest/v1/post_likes', { method: 'POST', body: [{ post_id: x.id, user_email: email }] });
-        renderDetail(root);
-      } catch (e) { toast('失败'); btn.disabled = false; }
+      } catch (e) {
+        btn.classList.toggle('on', liked);
+        btn.innerHTML = (liked ? '♥' : '♡') + (ls.length ? ' ' + ls.length : '');
+        toast('失败');
+      }
     };
   } catch {}
 
