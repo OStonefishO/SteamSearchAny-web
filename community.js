@@ -1650,6 +1650,7 @@ export async function openFriends() {
       '<button class="fr-tab" data-tab="add" role="tab">添加好友</button>' +
     '</nav>' +
     '<div class="fr-panel" id="frPanel"></div>' +
+    '<p class="fr-foot" id="frFoot"></p>' +
   '</div>';
 
   const panel = box.querySelector('#frPanel');
@@ -1779,6 +1780,12 @@ export async function openFriends() {
   const rerender = (tab) => {
     box.querySelectorAll('.fr-tab').forEach((t) => t.classList.toggle('on', t.dataset.tab === tab));
     panel.innerHTML = tab === 'list' ? viewList() : tab === 'req' ? viewReq() : viewAdd();
+    const foot = box.querySelector('#frFoot');
+    if (foot) {
+      foot.textContent = tab === 'add'
+        ? '输入对方的 10 位 UID，就能加好友'
+        : '共 ' + DATA.accepted.length + ' 位好友 · 去「添加好友」输入 UID 认识更多同好';
+    }
     bind(tab);
   };
 

@@ -1146,12 +1146,13 @@ textarea.input { resize: vertical; min-height: 96px; }
      导致聊天窗口退化成无样式（图片原始尺寸铺满全屏）。以后加样式只许 append，不许 slice。
    ========================================================================== */
 
-/* 弹窗外层：好友 / 聊天统一用大窗，覆盖默认的 760px 和 24px 内边距 */
+/* 弹窗外层：好友固定正方形；聊天还是宽矩形 */
 .modal-body:has(.fr-wrap) {
-  width: min(900px, 96vw) !important;
-  max-width: min(900px, 96vw) !important;
-  height: auto !important;
-  max-height: calc(100vh - 80px) !important;
+  width: min(600px, 92vw, calc(100vh - 96px)) !important;
+  max-width: none !important;
+  height: min(600px, 92vw, calc(100vh - 96px)) !important;
+  max-height: none !important;
+  aspect-ratio: 1 / 1;
   overflow: hidden !important;
   padding: 0;
   background: #080f16;
@@ -1175,18 +1176,18 @@ textarea.input { resize: vertical; min-height: 96px; }
 /* ---------- 好友：标题 + 胶囊 tab + 铺满的卡片墙 ---------- */
 .fr-wrap {
   box-sizing: border-box;
-  width: 100%; height: auto;
+  width: 100%; height: 100%;
   margin-top: 0 !important;
-  padding: 44px 22px 20px;
+  padding: 40px 22px 20px;
   display: flex; flex-direction: column; gap: 12px;
   background: linear-gradient(180deg, #0b141d, #080f16);
 }
 .modal-body:has(.fr-wrap) .fr-title { font-size: 21px; line-height: 1.2; }
 .fr-tabs { flex: none; }
 .fr-panel {
-  flex: 0 1 auto;
-  min-height: 180px;
-  max-height: calc(100vh - 250px);
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
   height: auto;
   overflow-y: auto;
   overflow-x: hidden;
@@ -1227,6 +1228,11 @@ textarea.input { resize: vertical; min-height: 96px; }
   padding: 0 12px;
 }
 .fr-panel .fr-empty span { font-size: 11.5px; color: var(--text-4); opacity: .8; }
+.fr-foot {
+  flex: none; margin: 0; padding: 2px 2px 0;
+  text-align: center; font-size: 11.5px; color: var(--text-4);
+  min-height: 16px;
+}
 
 /* ---------- 私聊 ---------- */
 .chat-body {
@@ -1351,18 +1357,20 @@ textarea.input { resize: vertical; min-height: 96px; }
 @keyframes lbIn { from { opacity: 0 } to { opacity: 1 } }
 
 @media (max-width: 700px) {
+  /* 手机上正方形太矮，改成竖着的方框 */
   .modal-body:has(.fr-wrap) {
     width: 94vw !important; max-width: 94vw !important;
-    height: auto !important; max-height: 82vh !important;
+    height: 74vh !important; max-height: 74vh !important;
+    aspect-ratio: auto;
   }
   .modal-body:has(.chat-body) {
     width: 94vw !important; max-width: 94vw !important;
     height: 82vh !important; max-height: 82vh !important;
   }
-  .fr-wrap { padding: 20px 12px 12px; }
+  .fr-wrap { padding: 18px 12px 12px; }
   .modal-body:has(.fr-wrap) .fr-title { font-size: 19px; }
-  .fr-panel { min-height: 120px; max-height: calc(82vh - 210px); }
-  .fr-list-grid { grid-template-columns: 1fr; }
+  .fr-panel { min-height: 0; }
+  .fr-list-grid { grid-template-columns: 1fr; align-content: start; }
   .chat-head { padding: 11px 12px; }
   .chat-list { padding: 14px 12px; }
   .msg { max-width: 92%; }
