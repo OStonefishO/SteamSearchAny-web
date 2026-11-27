@@ -16,7 +16,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
 
@@ -28,13 +28,16 @@ jobs:
         run: node tools/sync.mjs --limit=4000 --tags=40 --pages=3
 
       - name: 补系统需求与截图（每轮一批）
-        run: node tools/fetch-extra.mjs --limit=500
+        run: node tools/fetch-extra.mjs --limit=1500
+
+      - name: 抓 Steam 现场（特惠 / 新品 / 即将推出）
+        run: node tools/fetch-events.mjs
 
       - name: 提交并推送
         run: |
           git config user.name "lighthouse-bot"
           git config user.email "lighthouse-bot@users.noreply.github.com"
-          git add data/games.json data/version.json data/changelog.json CHANGELOG.md
+          git add data/games.json data/version.json data/changelog.json data/events.json CHANGELOG.md
           if git diff --cached --quiet; then
             echo "没有变化，跳过提交"
             exit 0
