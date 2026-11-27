@@ -981,3 +981,14 @@ textarea.input { resize: vertical; min-height: 96px; }
   color: var(--accent); font-weight: 700;
   background: rgba(69,189,247,.12); padding: 1px 4px; border-radius: 5px;
 }
+
+
+/* 设置面板跟随按钮 */
+.toolbar { position: relative; }
+.ui-panel {
+  position: absolute; top: calc(100% + 10px); right: 0; left: auto; z-index: 70;
+}
+.settings-btn { white-space: nowrap; }
+@media (max-width: 720px) {
+  .ui-panel { width: min(320px, calc(100vw - 24px)); }
+}

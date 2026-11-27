@@ -39,7 +39,7 @@
 </script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗼</text></svg>">
 <link rel="preload" href="fonts/inter-500.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=2026-11-26-11777-6375364-2nay">
+<link rel="stylesheet" href="style.css?v=2026-11-26-11777-6375364-2niv">
   <meta property="og:title" content="Steam 灯塔 · 找到没人注意到的那些游戏">
   <meta property="og:description" content="随机盲盒发现冷门佳作 + 多游戏加权相似检索（静态版，离线可跑）">
 </head>
@@ -98,28 +98,7 @@
     <span class="mail-dot hidden" id="notifDot"></span>
   </button>
   <button class="icon-btn" id="authBtn" title="登录 / 账号">登</button>
-  <div class="ui-panel" id="uiPanel" hidden>
-    <div class="ui-row">
-      <span class="ui-label">盲盒页每屏款数</span>
-      <output id="perScreenOut">32</output>
-      <input type="range" id="perScreen" min="8" max="48" step="4" value="32">
-    </div>
-    <div class="ui-row">
-      <span class="ui-label">相似结果每页款数</span>
-      <output id="perPageOut">45</output>
-      <input type="range" id="perPage" min="18" max="90" step="9" value="45">
-    </div>
-    <div class="ui-row">
-      <span class="ui-label">卡片尺寸</span>
-      <span class="seg seg-sm" id="cardSizeSel">
-        <button class="seg-btn" data-min="104">特小</button>
-        <button class="seg-btn active" data-min="126">标准</button>
-        <button class="seg-btn" data-min="152">大</button>
-        <button class="seg-btn" data-min="184">特大</button>
-      </span>
-    </div>
-    <div class="ui-foot">设置会自动保存在本机浏览器</div>
-  </div>
+  
 
   <span class="btn-soon" title="桌面客户端还在完善中，敬请期待">敬请期待</span>
   <div class="status-chip" id="corpusPill" title="本地语料库规模">
@@ -179,6 +158,28 @@
       </label>
       <label class="chk" title="只显示评测数少于 1 万的冷门作品"><input type="checkbox" id="hideHot"> 不看热门</label>
         <button class="btn settings-btn" id="uiBtn" title="显示设置" aria-haspopup="true" aria-expanded="false">⚙ 显示设置</button>
+        <div class="ui-panel" id="uiPanel" hidden>
+    <div class="ui-row">
+      <span class="ui-label">盲盒页每屏款数</span>
+      <output id="perScreenOut">32</output>
+      <input type="range" id="perScreen" min="8" max="48" step="4" value="32">
+    </div>
+    <div class="ui-row">
+      <span class="ui-label">相似结果每页款数</span>
+      <output id="perPageOut">45</output>
+      <input type="range" id="perPage" min="18" max="90" step="9" value="45">
+    </div>
+    <div class="ui-row">
+      <span class="ui-label">卡片尺寸</span>
+      <span class="seg seg-sm" id="cardSizeSel">
+        <button class="seg-btn" data-min="104">特小</button>
+        <button class="seg-btn active" data-min="126">标准</button>
+        <button class="seg-btn" data-min="152">大</button>
+        <button class="seg-btn" data-min="184">特大</button>
+      </span>
+    </div>
+    <div class="ui-foot">设置会自动保存在本机浏览器</div>
+  </div>
       <label class="date-ctl" title="按发售日期筛选（留空＝不限）">
         <span>发售</span>
         <input type="date" id="relFrom" aria-label="起始发售日">
@@ -312,8 +313,8 @@
 
 <script src="config.js"></script>
   <script>window.LIGHTHOUSE_STATIC = true;</script>
-<script src="local-api.js?v=2026-11-26-11777-6375364-2nay"></script>
-<script src="app.js?v=2026-11-26-11777-6375364-2nay" type="module"></script>
+<script src="local-api.js?v=2026-11-26-11777-6375364-2niv"></script>
+<script src="app.js?v=2026-11-26-11777-6375364-2niv" type="module"></script>
 
 <script id="LH_BOOT_AUTH">
 // 独立绑定登录按钮：即使主程序还没就绪也能打开登录框
