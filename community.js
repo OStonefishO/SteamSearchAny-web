@@ -1654,7 +1654,7 @@ export async function openFriends() {
 
   const av = (email, p) => {
     const img = String((p && p.avatar) || '');
-    return avatarHtml({ avatar: img.startsWith('data:') ? '🎮' : (img || '🎮'), img: img.startsWith('data:') ? img : '' }, 34);
+    return avatarHtml({ avatar: img.startsWith('data:') ? '🎮' : (img || '🎮'), img: img.startsWith('data:') ? img : '' }, 40);
   };
   const nm = (e) => (DATA.pm[e] && DATA.pm[e].name) || e.split('@')[0];
   const uidOf = (e) => (DATA.pm[e] && DATA.pm[e].uid) || '';
@@ -1686,7 +1686,7 @@ export async function openFriends() {
   const viewList = () => {
     paintChatUnread().catch(() => {});
     if (!DATA.accepted.length) return '<div class="fr-empty">还没有好友<br><span>切到「加好友」输入对方 UID</span></div>';
-    return DATA.accepted.map((x) => {
+    return '<div class="fr-list-grid">' + DATA.accepted.map((x) => {
       const other = x.requester === me ? x.target : x.requester;
       return '<div class="fr-item">' + av(other, DATA.pm[other]) +
         '<div class="fr-info"><div class="fr-name">' + (x.starred ? '<i class="star">★</i>' : '') + esc(x.remark || nm(other)) +
@@ -1697,7 +1697,7 @@ export async function openFriends() {
         '<button class="btn btn-sm" data-view="' + esc(other) + '">主页</button>' +
         '<button class="btn btn-sm" data-manage="' + x.id + '" data-em="' + esc(other) + '" data-nm="' + esc(nm(other)) + '" data-rm="' + esc(x.remark || '') + '" data-star="' + (x.starred ? '1' : '') + '">管理</button>' +
         '</div></div>';
-    }).join('');
+    }).join('') + '</div>';
   };
 
   const viewReq = () => {
