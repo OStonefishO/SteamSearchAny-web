@@ -192,6 +192,44 @@ async function refreshOwnPosts(p) {
 }
 
 /* ---------- 图片压缩 ---------- */
+function readDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result));
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+}
+
+// 聊天/帖子里的媒体：GIF 原样保留（压了就变静态图），MP4 用 mp4: 前缀标记
+const MEDIA_MAX_VIDEO = 5 * 1024 * 1024;
+const MEDIA_MAX_GIF = 3.5 * 1024 * 1024;
+
+async function fileToMedia(file) {
+  const type = String(file.type || '');
+  if (/^video\//.test(type)) {
+    if (file.size > MEDIA_MAX_VIDEO) throw new Error('视频太大（最大 5MB）');
+    return 'mp4:' + (await readDataUrl(file));
+  }
+  if (type === 'image/gif') {
+    if (file.size > MEDIA_MAX_GIF) throw new Error('GIF 太大（最大 3.5MB）');
+    return await readDataUrl(file);
+  }
+  return await compressImage(file);
+}
+
+const isVideoMedia = (src) => String(src || '').indexOf('mp4:') === 0;
+const mediaSrc = (src) => (isVideoMedia(src) ? String(src).slice(4) : String(src));
+
+function mediaHtml(src, cls) {
+  const s = src || '';
+  if (isVideoMedia(s)) {
+    return '<video class="' + (cls || 'msg-vid') + '" src="' + esc(mediaSrc(s)) + '" controls playsinline preload="metadata"></video>';
+  }
+  return '<img src="' + esc(s) + '" loading="lazy" alt="">';
+}
+
+
 function compressImage(file, max = 1000, quality = 0.72) {
   return new Promise((resolve, reject) => {
     const fr = new FileReader();
@@ -637,7 +675,7 @@ export async function openComposer(game) {
   box.querySelector('#imgIn').onchange = async (e) => {
     const files = [...(e.target.files || [])].slice(0, 9 - images.length);
     for (const f of files) {
-      try { images.push(await compressImage(f)); } catch {}
+      try { images.push(await fileToMedia(f)); } catch (err) { toast(err.message || '这张图加不进来'); }
     }
     renderImgs();
     e.target.value = '';
@@ -1220,7 +1258,7 @@ async function renderList(root) {
       '<span class="post-meta">' + esc(x.author_name) + ' · ' + timeAgo(x.created_at) + '</span></header>' +
       (x.title ? '<h4 class="post-title">' + esc(x.title) + '</h4>' : '') +
       '<p class="post-body">' + (x.body.length > 180 ? esc(x.body).slice(0, 180) + '…' : esc(x.body)) + '</p>' +
-      (imgs.length ? '<div class="imgs">' + imgs.slice(0, 4).map((src) => '<img src="' + src + '">').join('') + (imgs.length > 4 ? '<span class="more-img">+' + (imgs.length - 4) + '</span>' : '') + '</div>' : '') +
+      (imgs.length ? '<div class="imgs">' + imgs.slice(0, 4).map((src) => mediaHtml(src)).join('') + (imgs.length > 4 ? '<span class="more-img">+' + (imgs.length - 4) + '</span>' : '') + '</div>' : '') +
       cmtPreview(x.id) +
       '<div class="post-foot">' + reactionHtml(x.id, c, my, false) +
       '<span class="open-hint" data-noclick="1">点击帖子查看完整内容与评论 →</span></div>' +
@@ -1249,7 +1287,9 @@ async function renderDetail(root) {
   const av = avatarOf(x);
   const imgs = Array.isArray(x.images) ? x.images : [];
   root.innerHTML = '<div class="cmt-bar"><button class="btn" id="backBtn">← 返回社区</button>' +
-    '<span style="flex:1"></span><button class="btn btn-sm" id="delPost" style="display:none">删除帖子</button></div>' +
+    '<span style="flex:1"></span>' +
+    '<button class="btn btn-sm" id="sharePostBtn">分享</button>' +
+    '<button class="btn btn-sm" id="delPost" style="display:none">删除帖子</button></div>' +
     '<article class="post">' +
     '<header>' + avatarHtml(av, 34) +
     '<a class="post-author" data-author="' + esc(x.author_name) + '" data-aid="' + (x.author_id || '') + '">' + esc(x.author_name) + '<span class="post-uid">#' + (x.author_id || '----') + '</span></a>' +
@@ -1257,13 +1297,14 @@ async function renderDetail(root) {
     '<span class="post-meta">' + timeAgo(x.created_at) + '</span></header>' +
     (x.title ? '<h4 class="post-title" style="font-size:18px">' + esc(x.title) + '</h4>' : '') +
     '<p class="post-body" style="font-size:14px">' + esc(x.body) + '</p>' +
-    (imgs.length ? '<div class="detail-imgs">' + imgs.map((src) => '<img src="' + src + '" loading="lazy">').join('') + '</div>' : '') +
+    (imgs.length ? '<div class="detail-imgs">' + imgs.map((src) => mediaHtml(src)).join('') + '</div>' : '') +
     '<div class="post-foot" id="reactSlot"></div>' +
     '<div id="cmtList" class="post-comments"></div>' +
     '<div class="cmt-add"><input class="input sm" id="cmtInput" placeholder="评论两句…"><button class="btn btn-sm" id="cmtSend">发送</button></div>' +
     '</article>';
 
   root.querySelector('#backBtn').onclick = () => { VIEW = 'list'; CUR = null; renderCommunity(root); };
+  root.querySelector('#sharePostBtn').onclick = () => sharePost(x);
   root.querySelector('[data-author]').onclick = () => openAuthor(x.author_name, x.author_id);
 
   const delBtn = root.querySelector('#delPost');
@@ -2056,7 +2097,375 @@ try {
 } catch (e) {}
 
 
-/* ================= 好友私聊 ================= */
+/* ================= 分享（游戏 / 帖子） ================= */
+const SHARE_TAG = '#lh-share#';
+
+function encodeShare(obj) {
+  try {
+    return SHARE_TAG + JSON.stringify(obj);
+  } catch {
+    return '';
+  }
+}
+function parseShare(body) {
+  const s = String(body || '');
+  if (s.indexOf(SHARE_TAG) !== 0) return null;
+  try {
+    const o = JSON.parse(s.slice(SHARE_TAG.length));
+    return o && o.t ? o : null;
+  } catch {
+    return null;
+  }
+}
+
+function shareCardHtml(s) {
+  if (!s) return '';
+  if (s.t === 'game') {
+    return '<div class="share-card" data-share-game="' + Number(s.id || 0) + '" role="button" tabindex="0">' +
+      (s.cover ? '<img class="share-cover" src="' + esc(s.cover) + '" alt="" loading="lazy">' : '') +
+      '<div class="share-main">' +
+        '<div class="share-kicker">🎮 分享了一款游戏</div>' +
+        '<b class="share-title">' + esc(s.name || '') + '</b>' +
+        '<div class="share-sub">' + esc([s.year, s.pct ? s.pct + '% 好评' : null, s.gem != null ? '冷门 ' + s.gem : null].filter(Boolean).join(' · ')) + '</div>' +
+        '<span class="share-go">查看详情 →</span>' +
+      '</div></div>';
+  }
+  if (s.t === 'post') {
+    return '<div class="share-card share-post" data-share-post="' + Number(s.id || 0) + '" role="button" tabindex="0">' +
+      '<div class="share-main">' +
+        '<div class="share-kicker">📝 分享了一个帖子' + (s.author ? ' · ' + esc(s.author) : '') + '</div>' +
+        '<b class="share-title">' + esc(s.title || '无标题') + '</b>' +
+        '<div class="share-sub">' + esc(String(s.body || '').slice(0, 70)) + '</div>' +
+        '<span class="share-go">查看帖子 →</span>' +
+      '</div></div>';
+  }
+  return '';
+}
+
+function gameSharePayload(g) {
+  const rev = g.rev || {};
+  return {
+    t: 'game',
+    id: Number(g.id),
+    name: g.name || '',
+    cover: g.header || g.cover || ('https://cdn.akamai.steamstatic.com/steam/apps/' + g.id + '/header.jpg'),
+    year: g.year || null,
+    pct: typeof rev.pct === 'number' ? Math.round(rev.pct) : null,
+    gem: g.gem != null ? g.gem : null,
+  };
+}
+
+export async function shareGame(g) {
+  if (!g || !g.id) return;
+  if (!currentEmail()) return openLogin();
+  openSharePicker('分享给好友', gameSharePayload(g));
+}
+
+export async function sharePost(post) {
+  if (!post || !post.id) return;
+  if (!currentEmail()) return openLogin();
+  openShareMenu(post);
+}
+
+function openShareMenu(post) {
+  const m = document.getElementById('modal');
+  const box = document.getElementById('modalContent');
+  if (!m) return;
+  m.hidden = false;
+  box.innerHTML = '<div class="m-body"><h3>分享这条帖子</h3>' +
+    '<p class="share-hint">发给站内的好友，或者生成一张图发到外面。</p>' +
+    '<div class="share-menu">' +
+      '<button class="share-opt" id="shareToFriend"><b>发给好友</b><span>选好友 → 发到私聊，对方点开就能看</span></button>' +
+      '<button class="share-opt" id="shareToImage"><b>生成图片</b><span>导出 PNG，发微信 / QQ / 任何地方</span></button>' +
+    '</div>' +
+    '<button class="btn" id="shareBack" style="margin-top:14px">取消</button></div>';
+  box.querySelector('#shareBack').onclick = () => (m.hidden = true);
+  box.querySelector('#shareToFriend').onclick = () => openSharePicker('分享给好友', {
+    t: 'post',
+    id: Number(post.id),
+    title: post.title || '',
+    body: post.body || '',
+    author: post.author_name || profile().name,
+    game: post.game_name || '',
+  });
+  box.querySelector('#shareToImage').onclick = () => openPostShot(post);
+}
+
+function previewLabel(p) {
+  if (!p) return '';
+  return p.t === 'game' ? '要分享：' + (p.name || '这款游戏') : '要分享：' + (p.title || '这条帖子');
+}
+
+async function openSharePicker(title, payload) {
+  const m = document.getElementById('modal');
+  const box = document.getElementById('modalContent');
+  const me = currentEmail();
+  if (!m) return;
+  if (!me) return openLogin();
+  m.hidden = false;
+  box.innerHTML = '<div class="m-body"><h3>' + esc(title || '分享给好友') + '</h3>' +
+    '<p class="share-hint">' + esc(previewLabel(payload)) + '</p>' +
+    '<div id="shareList"><div class="empty-state"><span class="spin"></span>读取好友…</div></div>' +
+    '<div class="share-actions"><button class="btn" id="shareCancel">取消</button>' +
+    '<button class="btn btn-primary" id="shareGo" disabled>分享</button></div></div>';
+
+  const listEl = box.querySelector('#shareList');
+  const goBtn = box.querySelector('#shareGo');
+  const picked = new Set();
+  box.querySelector('#shareCancel').onclick = () => (m.hidden = true);
+
+  let rows = [];
+  try {
+    const fr = await rest('/rest/v1/' + FR + '?select=id,requester,target&status=eq.accepted&or=(requester.eq.' + encodeURIComponent(me) + ',target.eq.' + encodeURIComponent(me) + ')') || [];
+    const emails = Array.from(new Set(fr.map((r) => (r.requester === me ? r.target : r.requester))));
+    const pm = {};
+    if (emails.length) {
+      const ps = await rest('/rest/v1/profiles?select=user_email,name,avatar,bio&user_email=in.(' + emails.map((e) => '"' + e + '"').join(',') + ')') || [];
+      for (const p0 of ps) pm[p0.user_email] = p0;
+    }
+    rows = emails.map((e) => ({ email: e, prof: pm[e] || null }));
+  } catch (e) {
+    listEl.innerHTML = '<div class="me-empty">读取好友失败：' + esc(e.message) + '</div>';
+    return;
+  }
+
+  if (!rows.length) {
+    listEl.innerHTML = '<div class="me-empty"><span class="big">👥</span>还没有好友<br>' +
+      '<span>先去「好友 → 添加好友」输入对方 10 位 UID</span><br><br>' +
+      '<button class="btn btn-primary btn-sm" id="shareAddFriend">去加好友</button></div>';
+    const b = listEl.querySelector('#shareAddFriend');
+    if (b) b.onclick = () => openFriends();
+    return;
+  }
+
+  const paintPick = () => {
+    listEl.innerHTML = rows.map((r) => {
+      const on = picked.has(r.email);
+      const img = String((r.prof && r.prof.avatar) || '');
+      const av = avatarHtml({ avatar: img.startsWith('data:') ? '🎮' : (img || '🎮'), img: img.startsWith('data:') ? img : '' }, 38);
+      return '<div class="share-friend' + (on ? ' on' : '') + '" data-pick="' + esc(r.email) + '" role="button" tabindex="0">' +
+        av +
+        '<div class="share-finfo"><b>' + esc((r.prof && r.prof.name) || r.email.split('@')[0]) + '</b>' +
+        '<span>' + esc((r.prof && r.prof.bio) || '这个人懒得写简介') + '</span></div>' +
+        '<i class="share-check">' + (on ? '✓' : '') + '</i></div>';
+    }).join('');
+    listEl.querySelectorAll('[data-pick]').forEach((el) => {
+      el.onclick = () => {
+        const e2 = el.dataset.pick;
+        if (picked.has(e2)) picked.delete(e2); else picked.add(e2);
+        paintPick();
+        goBtn.disabled = picked.size === 0;
+        goBtn.textContent = picked.size ? '分享给 ' + picked.size + ' 位好友' : '分享';
+      };
+    });
+  };
+  paintPick();
+
+  goBtn.onclick = async () => {
+    goBtn.disabled = true;
+    const old = goBtn.textContent;
+    goBtn.textContent = '发送中…';
+    try {
+      const body = encodeShare(payload);
+      const items = Array.from(picked).map((em) => ({ sender: me, receiver: em, body, images: [] }));
+      await rest('/rest/v1/messages', { method: 'POST', body: items });
+      toast('已分享给 ' + items.length + ' 位好友');
+      m.hidden = true;
+    } catch (e) {
+      goBtn.disabled = false;
+      goBtn.textContent = old;
+      toast('分享失败：' + e.message);
+    }
+  };
+}
+
+/* ---------- 帖子生成图片 ---------- */
+function wrapText(ctx, text, maxWidth) {
+  const out = [];
+  let line = '';
+  for (const ch of String(text || '')) {
+    if (ch === '\n') { out.push(line); line = ''; continue; }
+    const test = line + ch;
+    if (ctx.measureText(test).width > maxWidth && line) { out.push(line); line = ch; } else line = test;
+  }
+  if (line) out.push(line);
+  return out;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+async function buildPostShot(post) {
+  const W = 760;
+  const PAD = 36;
+  const F = (w, s) => w + ' ' + s + 'px "PingFang SC","Microsoft YaHei","Hiragino Sans GB",system-ui,sans-serif';
+
+  const probe = document.createElement('canvas').getContext('2d');
+  probe.font = F(700, 27);
+  const titleLines = post.title ? wrapText(probe, post.title, W - PAD * 2).slice(0, 3) : [];
+  probe.font = F(400, 17);
+  const bodyLines = wrapText(probe, post.body || '', W - PAD * 2 - 46).slice(0, 18);
+
+  const headH = 92;
+  const titleH = titleLines.length ? titleLines.length * 38 + 12 : 0;
+  const bodyH = bodyLines.length * 29;
+  const footH = 78;
+  const H = PAD + headH + titleH + bodyH + 30 + footH;
+
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const ctx = cv.getContext('2d');
+
+  ctx.fillStyle = '#0b1119';
+  ctx.fillRect(0, 0, W, H);
+  const grad = ctx.createLinearGradient(0, 0, W, H);
+  grad.addColorStop(0, 'rgba(76,194,255,0.10)');
+  grad.addColorStop(0.6, 'rgba(11,17,25,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // 头像
+  const AV = 54;
+  const avatar = String(post.author_avatar || '');
+  const isImg = avatar.startsWith('data:');
+  ctx.save();
+  roundRect(ctx, PAD, PAD, AV, AV, 16);
+  ctx.fillStyle = '#0f1a24';
+  ctx.fill();
+  ctx.strokeStyle = '#1e2d3c';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+  if (isImg) {
+    try {
+      const img = new Image();
+      img.src = avatar;
+      await img.decode();
+      ctx.save();
+      roundRect(ctx, PAD, PAD, AV, AV, 16);
+      ctx.clip();
+      ctx.drawImage(img, PAD, PAD, AV, AV);
+      ctx.restore();
+    } catch {}
+  } else {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = F(400, 30);
+    ctx.fillStyle = '#eaf2fa';
+    ctx.fillText(avatar || '🎮', PAD + AV / 2, PAD + AV / 2 + 1);
+    ctx.restore();
+  }
+
+  // 昵称 / UID / 时间
+  const nameX = PAD + AV + 16;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = F(700, 18);
+  ctx.fillStyle = '#eaf2fa';
+  const authorName = post.author_name || '匿名';
+  ctx.fillText(authorName, nameX, PAD + 22);
+  const nameW = ctx.measureText(authorName).width;
+  ctx.font = F(400, 12.5);
+  ctx.fillStyle = '#5b7186';
+  if (post.author_id) ctx.fillText('#' + post.author_id, nameX + nameW + 8, PAD + 22);
+  ctx.font = F(400, 12.5);
+  ctx.fillStyle = '#5b7186';
+  ctx.fillText(timeAgo(post.created_at), nameX, PAD + 41);
+
+  // 游戏胶囊
+  if (post.game_name) {
+    const label = post.game_name;
+    ctx.font = F(600, 12);
+    const tw = ctx.measureText(label).width;
+    const pw = tw + 20;
+    const py = PAD + 50;
+    ctx.save();
+    roundRect(ctx, nameX, py, pw, 22, 11);
+    ctx.fillStyle = 'rgba(76,194,255,0.14)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(76,194,255,0.35)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = '#8fd3f5';
+    ctx.font = F(600, 12);
+    ctx.fillText(label, nameX + 10, py + 15);
+  }
+
+  let y = PAD + headH;
+
+  // 标题
+  if (titleLines.length) {
+    ctx.font = F(700, 27);
+    ctx.fillStyle = '#f2f8ff';
+    for (const ln of titleLines) {
+      ctx.fillText(ln, PAD, y + 26);
+      y += 38;
+    }
+    y += 12;
+  }
+
+  // 正文
+  ctx.font = F(400, 17);
+  ctx.fillStyle = '#b3c6d6';
+  for (const ln of bodyLines) {
+    ctx.fillText(ln, PAD, y + 20);
+    y += 29;
+  }
+
+  // 页脚
+  const fy = H - footH + 6;
+  ctx.strokeStyle = '#1b2836';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(PAD, fy);
+  ctx.lineTo(W - PAD, fy);
+  ctx.stroke();
+  ctx.font = F(600, 13);
+  ctx.fillStyle = '#7f95a8';
+  ctx.fillText('Steam 灯塔 · 社区', PAD, fy + 30);
+  ctx.font = F(400, 12);
+  ctx.fillStyle = '#4d6373';
+  ctx.textAlign = 'right';
+  ctx.fillText('ostonefisho.github.io/SteamSearchAny-web', W - PAD, fy + 30);
+  ctx.textAlign = 'left';
+
+  return cv;
+}
+
+async function openPostShot(post) {
+  const m = document.getElementById('modal');
+  const box = document.getElementById('modalContent');
+  if (!m) return;
+  m.hidden = false;
+  box.innerHTML = '<div class="m-body"><h3>帖子图片</h3><div class="empty-state"><span class="spin"></span>正在生成…</div></div>';
+  try {
+    const cv = await buildPostShot(post);
+    const url = cv.toDataURL('image/png');
+    box.innerHTML = '<div class="m-body"><h3>帖子图片</h3>' +
+      '<img class="shot-preview" src="' + url + '" alt="帖子图片">' +
+      '<div class="share-actions">' +
+        '<a class="btn btn-primary" id="shotDl" download="lighthouse-post-' + Number(post.id || 0) + '.png" href="' + url + '">下载图片</a>' +
+        '<button class="btn" id="shotClose">关闭</button>' +
+      '</div>' +
+      '<p class="me-foot">下载后可以发到微信 / QQ / 任何地方</p></div>';
+    box.querySelector('#shotClose').onclick = () => (m.hidden = true);
+  } catch (e) {
+    box.innerHTML = '<div class="m-body"><h3>帖子图片</h3><p class="form-msg form-err">生成失败：' + esc(e.message) + '</p></div>';
+  }
+}
+
+/* ================= 私聊 ================= */
 const CHAT_EMOJI = ['😀', '😂', '🥹', '😍', '🤔', '😎', '😭', '😡', '👍', '👎', '🎮', '🔥', '💡', '🎉', '❤️', '🌙'];
 
 export function openChat(peerEmail, peerName) {
@@ -2088,7 +2497,7 @@ export function openChat(peerEmail, peerName) {
     '<div class="chat-compose">' +
       '<button class="chat-tool" id="chatEmoji" title="表情">🙂</button>' +
       '<button class="chat-tool" id="chatPic" title="图片">🖼</button>' +
-      '<input type="file" id="chatFile" accept="image/*" multiple class="hidden">' +
+      '<input type="file" id="chatFile" accept="image/*,video/mp4,video/webm" multiple class="hidden">' +
       '<input class="chat-input" id="chatInput" placeholder="说点什么…">' +
       '<button class="chat-send" id="chatSend">发送</button>' +
     '</div>' +
@@ -2106,7 +2515,8 @@ export function openChat(peerEmail, peerName) {
   const imgsWrap = box.querySelector('#chatImgs');
 
   const renderImgs = () => {
-    imgsWrap.innerHTML = pending.map((src, i) => '<span class="thumb"><img src="' + src + '"><b data-rm="' + i + '">×</b></span>').join('');
+    imgsWrap.innerHTML = pending.map((src, i) => '<span class="thumb' + (isVideoMedia(src) ? ' thumb-vid' : '') + '">' +
+      mediaHtml(src, 'thumb-media') + '<b data-rm="' + i + '">×</b></span>').join('');
     imgsWrap.querySelectorAll('[data-rm]').forEach((btn) => {
       btn.onclick = () => { pending.splice(Number(btn.dataset.rm), 1); renderImgs(); };
     });
@@ -2154,12 +2564,13 @@ export function openChat(peerEmail, peerName) {
       list.innerHTML = rows.length ? rows.map((r) => {
         const mine = r.sender === me;
         const imgs = Array.isArray(r.images) ? r.images : [];
-        return '<div class="msg ' + (mine ? 'mine' : '') + '">' +
+        const shared = parseShare(r.body);
+        return '<div class="msg ' + (mine ? 'mine' : '') + (shared ? ' msg-share' : '') + '">' +
           '<div class="msg-av">' + (mine ? meAv : peerAv) + '</div>' +
           '<div class="msg-body">' +
             '<div class="msg-who">' + esc(mine ? (meP.name || '我') : peerLabel) + '</div>' +
-            (r.body ? '<div class="msg-bubble">' + linkifyMentions(r.body) + '</div>' : '') +
-            (imgs.length ? '<div class="msg-pics">' + imgs.map((src) => '<img src="' + src + '">').join('') + '</div>' : '') +
+            (shared ? shareCardHtml(shared) : (r.body ? '<div class="msg-bubble">' + linkifyMentions(r.body) + '</div>' : '')) +
+            (imgs.length ? '<div class="msg-pics">' + imgs.map((src) => mediaHtml(src)).join('') + '</div>' : '') +
             '<div class="msg-time">' + timeAgo(r.created_at) + '</div>' +
           '</div></div>';
       }).join('') : '<div class="chat-empty">还没有消息，打个招呼吧 👋</div>';
@@ -2179,7 +2590,7 @@ export function openChat(peerEmail, peerName) {
       '<div class="msg-body">' +
       '<div class="msg-who">' + esc(meP.name || '我') + '</div>' +
       (body ? '<div class="msg-bubble">' + linkifyMentions(body) + '</div>' : '') +
-      (pics.length ? '<div class="msg-pics">' + pics.map((src) => '<img src="' + src + '">').join('') + '</div>' : '') +
+      (pics.length ? '<div class="msg-pics">' + pics.map((src) => mediaHtml(src)).join('') + '</div>' : '') +
       '<div class="msg-time">发送中…</div>' +
       '</div>';
     list.appendChild(row);
@@ -2188,6 +2599,21 @@ export function openChat(peerEmail, peerName) {
   };
 
   list.addEventListener('load', scrollToBottom, true);
+  // 分享卡片：点开就是对方的详情页 / 帖子详情
+  list.addEventListener('click', (ev) => {
+    const g = ev.target.closest('[data-share-game]');
+    if (g) {
+      close();
+      document.dispatchEvent(new CustomEvent('lh:openGame', { detail: { id: Number(g.dataset.shareGame) } }));
+      return;
+    }
+    const p = ev.target.closest('[data-share-post]');
+    if (p) {
+      close();
+      window.__lhOpenPost = Number(p.dataset.sharePost);
+      document.dispatchEvent(new CustomEvent('lh:gotoCommunity'));
+    }
+  });
   const send = async () => {
     if (sending) return;                       // 防重复点击
     const input = box.querySelector('#chatInput');
@@ -2249,7 +2675,11 @@ export function openChat(peerEmail, peerName) {
   box.querySelector('#chatFile').onchange = async (e) => {
     const files = [...(e.target.files || [])].slice(0, 3 - pending.length);
     for (const f of files) {
-      try { pending.push(await compressImage(f, 900, 0.72)); } catch (err) {}
+      try {
+        pending.push(await fileToMedia(f));       // GIF 原样、MP4 打 mp4: 前缀、其它图片压缩
+      } catch (err) {
+        toast(err.message || '这个文件加不进来');
+      }
     }
     renderImgs();
     e.target.value = '';

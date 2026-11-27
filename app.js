@@ -670,6 +670,7 @@ async function openDetail(g) {
         </div>
         <div class="hero-actions" style="margin-top:22px">
           <a class="btn btn-primary" href="${STORE(full.id)}" target="_blank" rel="noreferrer">在 Steam 打开 ↗</a>
+          <button class="btn" id="modalShare">分享给好友</button>
           <button class="btn" id="modalSeed">以此找相似</button>
         </div>
       </div>`;
@@ -685,6 +686,14 @@ async function openDetail(g) {
       closeModal();
       switchView('similar');
       runSimilar();
+    });
+    $('#modalShare', content)?.addEventListener('click', async () => {
+      try {
+        const m = await import('./community.js?v=' + Date.now());
+        m.shareGame(full);
+      } catch (e) {
+        toast('分享面板没加载出来：' + e.message);
+      }
     });
   } catch (e) {
     content.innerHTML = `<div class="m-body" style="padding-top:26px"><h3>${esc(g.name)}</h3>
@@ -824,6 +833,7 @@ async function openInfo(g) {
         <a class="btn btn-primary" href="${STORE(full.id)}" target="_blank" rel="noreferrer">Steam 商店 ↗</a>
         <a class="btn" href="${yt}" target="_blank" rel="noreferrer">YouTube ↗</a>
         <button class="btn" id="infoSeed">加为种子</button>
+        <button class="btn" id="infoShareFriend">分享给好友</button>
         <button class="btn" id="infoShare">分享到社区</button>
       <button class="btn btn-quiet" id="infoDetail">完整详情</button>
       </div>
@@ -837,6 +847,11 @@ async function openInfo(g) {
   });
   $('#infoShare', content)?.addEventListener('click', () => {
     import('./community.js?v=' + Date.now()).then((m) => m.openComposer(full));
+  });
+  $('#infoShareFriend', content)?.addEventListener('click', () => {
+    import('./community.js?v=' + Date.now())
+      .then((m) => m.shareGame(full))
+      .catch((e) => toast('分享面板没加载出来：' + e.message));
   });
 
   $('#infoDetail', content)?.addEventListener('click', () => openDetail(full));
