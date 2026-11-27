@@ -39,7 +39,7 @@
 </script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗼</text></svg>">
 <link rel="preload" href="fonts/inter-500.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=2026-11-26-11777-6375364-2mzo">
+<link rel="stylesheet" href="style.css?v=2026-11-26-11777-6375364-2nay">
   <meta property="og:title" content="Steam 灯塔 · 找到没人注意到的那些游戏">
   <meta property="og:description" content="随机盲盒发现冷门佳作 + 多游戏加权相似检索（静态版，离线可跑）">
 </head>
@@ -82,8 +82,6 @@
       <div class="brand-sub">照亮没人注意到的那些游戏</div>
     </div>
   </div>
-
-  <button class="icon-btn" id="uiBtn" title="显示设置" aria-haspopup="true" aria-expanded="false">⚙</button>
 
   <nav class="tabs" role="tablist">
     <button class="tab active" data-view="random" role="tab">盲盒发现</button>
@@ -180,6 +178,7 @@
         <input type="range" id="minPct" min="0" max="100" step="5" value="0">
       </label>
       <label class="chk" title="只显示评测数少于 1 万的冷门作品"><input type="checkbox" id="hideHot"> 不看热门</label>
+        <button class="btn settings-btn" id="uiBtn" title="显示设置" aria-haspopup="true" aria-expanded="false">⚙ 显示设置</button>
       <label class="date-ctl" title="按发售日期筛选（留空＝不限）">
         <span>发售</span>
         <input type="date" id="relFrom" aria-label="起始发售日">
@@ -313,8 +312,8 @@
 
 <script src="config.js"></script>
   <script>window.LIGHTHOUSE_STATIC = true;</script>
-<script src="local-api.js?v=2026-11-26-11777-6375364-2mzo"></script>
-<script src="app.js?v=2026-11-26-11777-6375364-2mzo" type="module"></script>
+<script src="local-api.js?v=2026-11-26-11777-6375364-2nay"></script>
+<script src="app.js?v=2026-11-26-11777-6375364-2nay" type="module"></script>
 
 <script id="LH_BOOT_AUTH">
 // 独立绑定登录按钮：即使主程序还没就绪也能打开登录框
