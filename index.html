@@ -308,5 +308,32 @@
   <script>window.LIGHTHOUSE_STATIC = true;</script>
 <script src="local-api.js?v=2026-11-26-11777-6375364-2j1j"></script>
 <script src="app.js?v=2026-11-26-11777-6375364-2j1j" type="module"></script>
+
+<script id="LH_BOOT_AUTH">
+// 独立绑定登录按钮：即使主程序还没就绪也能打开登录框
+(function () {
+  var btn = document.getElementById('authBtn');
+  if (!btn) return;
+  btn.addEventListener('click', function (ev) {
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+    import('./community.js?v=' + Date.now()).then(function (m) {
+      m.openLogin();
+    }).catch(function (e) {
+      var modal = document.getElementById('modal');
+      var content = document.getElementById('modalContent');
+      if (modal && content) {
+        modal.hidden = false;
+        content.innerHTML = '<div class="m-body"><h3>登录模块加载失败</h3>' +
+          '<p style="color:#f4736f;font-size:12.5px;margin-top:8px;word-break:break-all">' +
+          String(e && e.message || e) + '</p>' +
+          '<p style="color:var(--text-4);font-size:12px;margin-top:8px">按 F12 看 Console 里的红字</p></div>';
+      } else {
+        alert('登录模块加载失败：' + (e && e.message || e));
+      }
+    });
+  }, true);
+})();
+</script>
 </body>
 </html>
