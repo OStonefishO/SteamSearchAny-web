@@ -192,6 +192,13 @@ async function refreshOwnPosts(p) {
 }
 
 /* ---------- 图片压缩 ---------- */
+/** 帖子里关联游戏的小方图（Steam 横版胶囊裁成正方形） */
+function gameThumb(id) {
+  const n = Number(id) || 0;
+  if (!n) return '';
+  return '<img class="post-game-thumb" src="https://cdn.akamai.steamstatic.com/steam/apps/' + n + '/capsule_231x87.jpg" alt="" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">';
+}
+
 function readDataUrl(file) {
   return new Promise((resolve, reject) => {
     const fr = new FileReader();
@@ -1680,7 +1687,7 @@ async function renderList(root) {
     const imgs = Array.isArray(x.images) ? x.images : [];
     return '<article class="post post-clickable" data-open="' + x.id + '">' +
       '<header>' + avatarHtml(av, 26) +
-      (x.game_id ? '<a class="post-game" href="?info=' + x.game_id + '" data-noclick="1">' + esc(x.game_name) + '</a>' : '<span class="post-game plain">' + esc(x.game_name) + '</span>') +
+      (x.game_id ? '<a class="post-game" href="?info=' + x.game_id + '" data-noclick="1">' + gameThumb(x.game_id) + esc(x.game_name) + '</a>' : '<span class="post-game plain">' + esc(x.game_name) + '</span>') +
       '<span class="post-meta">' + esc(x.author_name) + ' · ' + timeAgo(x.created_at) + '</span></header>' +
       (x.title ? '<h4 class="post-title">' + esc(x.title) + '</h4>' : '') +
       '<p class="post-body">' + (x.body.length > 180 ? esc(x.body).slice(0, 180) + '…' : esc(x.body)) + '</p>' +
@@ -1718,7 +1725,7 @@ async function renderDetail(root) {
     '<article class="post">' +
     '<header>' + avatarHtml(av, 34) +
     '<a class="post-author" data-author="' + esc(x.author_name) + '" data-aid="' + (x.author_id || '') + '">' + esc(x.author_name) + '<span class="post-uid">#' + (x.author_id || '----') + '</span></a>' +
-    (x.game_id ? '<a class="post-game" href="?info=' + x.game_id + '">' + esc(x.game_name) + '</a>' : '<span class="post-game plain">' + esc(x.game_name) + '</span>') +
+    (x.game_id ? '<a class="post-game" href="?info=' + x.game_id + '">' + gameThumb(x.game_id) + esc(x.game_name) + '</a>' : '<span class="post-game plain">' + esc(x.game_name) + '</span>') +
     '<span class="post-meta">' + timeAgo(x.created_at) + '</span>' +
     '<button class="post-share" id="sharePostBtn" type="button" title="分享这条帖子" aria-label="分享这条帖子">' +
       '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -3179,10 +3186,19 @@ export function openChat(peerEmail, peerName) {
     '</div>';
 
   const list = box.querySelector('#chatList');
-  const scrollToBottom = () => {
+  // 只有"贴着底部"时才自动滚到最新；上滑看历史时不要抢滚动位置
+  let stick = true;
+  list.addEventListener('scroll', () => {
+    const gap = list.scrollHeight - list.scrollTop - list.clientHeight;
+    stick = gap < 80;
+  }, { passive: true });
+
+  const scrollToBottom = (force = false) => {
+    if (!force && !stick) return;
+    stick = true;
     list.scrollTop = list.scrollHeight;
-    requestAnimationFrame(() => { list.scrollTop = list.scrollHeight; });
-    setTimeout(() => { list.scrollTop = list.scrollHeight; }, 120);
+    requestAnimationFrame(() => { if (force || stick) list.scrollTop = list.scrollHeight; });
+    setTimeout(() => { if (force || stick) list.scrollTop = list.scrollHeight; }, 120);
   };
   const imgsWrap = box.querySelector('#chatImgs');
 
@@ -3233,6 +3249,7 @@ export function openChat(peerEmail, peerName) {
       const peerAv = avatarHtml({ avatar: img.startsWith('data:') ? '🎮' : (img || '🎮'), img: img.startsWith('data:') ? img : '' }, 30);
       const peerLabel = (peerProf && peerProf.name) || peerName || '对方';
 
+      const prevTop = list.scrollTop;   // 重排前记一下位置：上滑看历史时别把人拽走
       list.innerHTML = rows.length ? rows.map((r) => {
         const mine = r.sender === me;
         const imgs = Array.isArray(r.images) ? r.images : [];
@@ -3246,7 +3263,8 @@ export function openChat(peerEmail, peerName) {
             '<div class="msg-time">' + timeAgo(r.created_at) + '</div>' +
           '</div></div>';
       }).join('') : '<div class="chat-empty">还没有消息，打个招呼吧 👋</div>';
-      scrollToBottom();
+      if (stick) scrollToBottom();
+      else list.scrollTop = prevTop;
     } catch (e) {
       list.innerHTML = '<div class="chat-empty">读取失败：' + esc(e.message) + '<br><span style="font-size:12px;opacity:.7">多半是 messages 表还没建</span></div>';
     }
@@ -3266,11 +3284,12 @@ export function openChat(peerEmail, peerName) {
       '<div class="msg-time">发送中…</div>' +
       '</div>';
     list.appendChild(row);
+    stick = true;
     list.scrollTop = list.scrollHeight;
     return row;
   };
 
-  list.addEventListener('load', scrollToBottom, true);
+  list.addEventListener('load', () => scrollToBottom(), true);
   // 分享卡片：点开就是对方的详情页 / 帖子详情
   list.addEventListener('click', (ev) => {
     const g = ev.target.closest('[data-share-game]');

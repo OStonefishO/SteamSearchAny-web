@@ -539,6 +539,16 @@ textarea.input { resize: vertical; min-height: 96px; }
 .post header { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .post-game { color: var(--accent); font-weight: 600; font-size: 14px; text-decoration: none; }
 .post-game:hover { text-decoration: underline; }
+/* 关联游戏前面的小方图 */
+.post-game { display: inline-flex; align-items: center; gap: 5px; vertical-align: middle; }
+.post-game-thumb {
+  width: 18px; height: 18px; flex: none;
+  border-radius: 5px; object-fit: cover; object-position: center;
+  border: 1px solid var(--line-2); background: #0f1a24;
+}
+@media (max-width: 620px) {
+  .post-game-thumb { width: 16px; height: 16px; border-radius: 4px; }
+}
 .post-meta { font-size: 11.5px; color: var(--text-4); }
 .post-body { margin: 8px 0 10px; font-size: 13.5px; line-height: 1.7; color: var(--text-2); white-space: pre-wrap; }
 .post-comments { border-top: 1px solid var(--line); padding-top: 10px; display: grid; gap: 6px; }
