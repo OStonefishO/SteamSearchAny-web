@@ -758,3 +758,13 @@ textarea.input { resize: vertical; min-height: 96px; }
   width: 24px; height: 24px; border-radius: 7px; display: inline-grid; place-items: center;
   font-size: 13px; border: 1px solid var(--line); margin-right: 8px;
 }
+
+/* 头像编辑 / 作者主页 */
+.crop-wrap { display:flex; justify-content:center; margin:10px 0 }
+.crop-wrap canvas { border-radius:16px; background:#0a1219 }
+.post-author { color:var(--text-2); font-size:12.5px; font-weight:600; cursor:pointer; text-decoration:none }
+.post-author:hover { color:var(--accent) }
+.post-del { margin-left:auto; font-size:11.5px; color:var(--text-4); background:transparent; border:1px solid var(--line-2); border-radius:6px; padding:2px 8px }
+.post-del:hover { color:#f4736f; border-color:#7a2733 }
+.author-post { padding:10px 0; border-bottom:1px solid var(--line) }
+.author-post b { font-size:14px }
