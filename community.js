@@ -786,7 +786,7 @@ export async function openAuthor(name, uid) {
         <div class="author-stat"><b>${posts.length}</b><span>帖子</span></div>
         <div class="author-stat"><b>${priv.showFavs ? favIds.length : '—'}</b><span>收藏</span></div>
         <div class="author-stat"><b>${priv.showGallery ? gallery.length : '—'}</b><span>图片</span></div>
-        <div class="author-stat"><b>${priv.allowWall ? wall.length : '—'}</b><span>留言</span></div>
+        <div class="author-stat"><b id="wallStatN">${priv.allowWall ? wall.length : '—'}</b><span>留言</span></div>
         <div class="author-stat"><b>${likeInfo.count}</b><span>主页赞</span></div>
       </div>
     </div>
@@ -795,7 +795,7 @@ export async function openAuthor(name, uid) {
       <button class="author-tab on" data-atab="posts">帖子 <i>${posts.length}</i></button>
       ${priv.showFavs ? `<button class="author-tab" data-atab="favs">收藏夹 <i>${favIds.length}</i></button>` : ''}
       ${priv.showGallery ? `<button class="author-tab" data-atab="gallery">图片 <i>${gallery.length}</i></button>` : ''}
-      ${priv.allowWall ? `<button class="author-tab" data-atab="wall">留言板 <i>${wall.length}</i></button>` : ''}
+      ${priv.allowWall ? `<button class="author-tab" data-atab="wall">留言板 <i id="wallTabN">${wall.length}</i></button>` : ''}
     </nav>
     <div id="authorPane"></div>
   </div>`;
@@ -803,6 +803,13 @@ export async function openAuthor(name, uid) {
   const pane = box.querySelector('#authorPane');
 
   let currentWall = wall;   // 当前渲染的留言列表（发完留言先本地插一条）
+  const syncWallCounts = () => {
+    const n = String(currentWall.length);
+    const a = box.querySelector('#wallStatN');
+    const b = box.querySelector('#wallTabN');
+    if (a && a.textContent !== '—') a.textContent = n;
+    if (b) b.textContent = n;
+  };
 
   const paintWall = (rows) => {
     rows = rows || [];
@@ -818,8 +825,9 @@ export async function openAuthor(name, uid) {
             <div class="wall-top"><b>${esc(w.author_name || w.author_email || '某人')}</b><span class="post-meta">${timeAgo(w.created_at)}</span></div>
             <p class="wall-body">${esc(w.body)}</p>
           </div>
-          ${me && (w.author_email === me || target === me) ? `<button class="wall-del" data-wdel="${w.id}" title="删除">×</button>` : ''}
+          ${me && (w.author_email === me || target === me) && !w.tmp ? `<button class="wall-del" data-wdel="${w.id}" title="删除">×</button>` : ''}
         </div>`).join('') : '<div class="me-empty">还没有人留言，来抢第一条</div>'}</div>
+      <p class="wall-note" id="wallNote" hidden>这条已经提交到云端了，但读回来是空的 —— 给 wall_messages 加一条 select 策略（见 db/fix-rls-email.sql）</p>
     </div>`;
 
     const sendBtn = pane.querySelector('#wallSend');
@@ -840,10 +848,19 @@ export async function openAuthor(name, uid) {
           toast('留言成功');
           pushNotif({ user_email: target, kind: 'wall', post_title: '主页留言', from_name: p.name || me, body });
           // 先把这条挂到本地列表上，立刻可见（哪怕 wall_messages 的 SELECT 策略还没配好）
-          const local = { id: 'tmp-' + Date.now(), author_email: me, author_name: p.name, author_avatar: p.img || p.avatar, body, created_at: new Date().toISOString() };
-          paintWall([local].concat(currentWall.filter((w) => w.id !== local.id)));
-          // 再回云端拉一次，拉到了就用云端的数据覆盖
-          loadWall(target).then((fresh) => { if (fresh && fresh.length) paintWall(fresh); }).catch(() => {});
+          const local = { tmp: true, id: 'tmp-' + Date.now(), author_email: me, author_name: p.name, author_avatar: p.img || p.avatar, body, created_at: new Date().toISOString() };
+          paintWall([local].concat(currentWall));
+          syncWallCounts();
+          // 再回云端拉一次：拉到了用云端数据覆盖；拉不到（常见的 SELECT 策略问题）就把提示亮出来
+          loadWall(target)
+            .then((fresh) => {
+              if (fresh && fresh.length) { paintWall(fresh); syncWallCounts(); }
+              else {
+                const note = pane.querySelector('#wallNote');
+                if (note) note.hidden = false;
+              }
+            })
+            .catch(() => {});
         } catch (e) {
           const msg = String(e.message || e);
           // 42501 = RLS 拒绝；把当前身份一起打出来，方便判断是策略问题还是没登录
@@ -854,9 +871,11 @@ export async function openAuthor(name, uid) {
     }
     pane.querySelectorAll('[data-wdel]').forEach((b) => {
       b.onclick = async () => {
+        const id = String(b.dataset.wdel || '');
+        if (!/^\d+$/.test(id)) return toast('这条还没同步到云端，重新打开主页再看');
         if (!confirm('删除这条留言？')) return;
         try {
-          await rest('/rest/v1/wall_messages?id=eq.' + b.dataset.wdel, { method: 'DELETE' });
+          await rest('/rest/v1/wall_messages?id=eq.' + id, { method: 'DELETE' });
           paintWall(await loadWall(target));
         } catch (e) {
           toast('删除失败：' + e.message);

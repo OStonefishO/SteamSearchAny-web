@@ -1837,6 +1837,12 @@ textarea.input { resize: vertical; min-height: 96px; }
 .wall-add { display: flex; gap: 8px; }
 .wall-add .input { flex: 1; min-width: 0; }
 .wall-login { margin: 0; font-size: 12.5px; color: var(--text-4); }
+.wall-note {
+  margin: 10px 0 0; padding: 8px 10px; border-radius: 10px;
+  font-size: 11.5px; line-height: 1.6; color: #ffd08a;
+  background: rgba(255, 187, 85, 0.1);
+  border: 1px solid rgba(255, 187, 85, 0.35);
+}
 .wall-list { display: flex; flex-direction: column; gap: 10px; }
 .wall-item {
   display: flex; gap: 10px; align-items: flex-start;
@@ -1995,7 +2001,7 @@ textarea.cmt-input {
 
 
 /* 主页右上角三颗按钮统一尺寸：点赞 / 好友 / ⋯ 一样高、一样圆角、一样的字 */
-.author-actions { gap: 8px; align-items: center; }
+.author-actions { gap: 8px; align-items: center; align-self: center; }
 .author-actions .btn {
   height: 34px; padding: 0 14px;
   border-radius: 9px; font-size: 12.5px; font-weight: 500;
