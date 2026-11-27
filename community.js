@@ -1500,11 +1500,11 @@ export async function openFriends() {
 
   box.innerHTML = '<div class="m-body fr-wrap">' +
     '<h3 class="fr-title">好友</h3>' +
-    '<div class="fr-tabs" id="frTabs">' +
-      '<button class="fr-tab on" data-tab="list">好友列表 <i id="cntList">0</i></button>' +
-      '<button class="fr-tab" data-tab="req">好友申请 <i id="cntReq">0</i></button>' +
-      '<button class="fr-tab" data-tab="add">加好友</button>' +
-    '</div>' +
+    '<nav class="fr-tabs" id="frTabs" role="tablist">' +
+      '<button class="fr-tab on" data-tab="list" role="tab">好友列表 <i id="cntList">0</i></button>' +
+      '<button class="fr-tab" data-tab="req" role="tab">申请管理 <i id="cntReq">0</i></button>' +
+      '<button class="fr-tab" data-tab="add" role="tab">添加好友</button>' +
+    '</nav>' +
     '<div class="fr-panel" id="frPanel"></div>' +
   '</div>';
 

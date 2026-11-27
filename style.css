@@ -1012,28 +1012,35 @@ textarea.input { resize: vertical; min-height: 96px; }
 
 /* 好友面板（三 tab + 固定方形） */
 .fr-wrap {
-  width: min(560px, 92vw);
+  width: min(720px, 94vw);
   display: flex; flex-direction: column; gap: 12px;
 }
 .fr-title { margin: 0; }
 
 .fr-tabs {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
-  padding: 5px; background: #0a1219; border: 1px solid var(--line); border-radius: 12px;
+  display: inline-flex; align-items: center; gap: 4px; align-self: flex-start;
+  padding: 5px; background: #0b141d;
+  border: 1px solid var(--line-2); border-radius: 999px;
 }
 .fr-tab {
-  height: 34px; border: 0; border-radius: 9px; cursor: pointer;
-  background: transparent; color: var(--text-3); font-size: 12.5px; font-weight: 600;
-  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  height: 34px; padding: 0 18px; border: 0; border-radius: 999px; cursor: pointer;
+  background: transparent; color: var(--text-3);
+  font-size: 13px; font-weight: 600; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: background .16s, color .16s;
 }
+.fr-tab:hover { color: var(--text-2); }
 .fr-tab i {
   font-style: normal; font-size: 10.5px; font-weight: 700;
   background: #16303f; color: #9fd6f5; border-radius: 999px; padding: 0 6px; line-height: 15px;
 }
-.fr-tab.on { background: rgba(69,189,247,.16); color: #cfeaff; box-shadow: inset 0 0 0 1px rgba(69,189,247,.4); }
-.fr-tab.on i { background: rgba(69,189,247,.28); color: #eaf7ff; }
+.fr-tab.on {
+  background: linear-gradient(180deg, #7fd4fb, #45bdf7);
+  color: #05161f; font-weight: 700;
+  box-shadow: 0 6px 16px -10px rgba(69,189,247,.9);
+}
+.fr-tab.on i { background: rgba(5,22,31,.22); color: #05161f; }
 
-/* 固定方形内容区，切换 tab 不变形 */
 .fr-panel {
   height: 400px; overflow-y: auto; overflow-x: hidden;
   background: #0a1219; border: 1px solid var(--line); border-radius: 14px;
