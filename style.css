@@ -1108,3 +1108,20 @@ textarea.input { resize: vertical; min-height: 96px; }
 .star { color: #ffb04d; margin-right: 5px; font-size: 12px; }
 .cmt-menu button.danger { color: #ff8f8a; }
 .cmt-menu button.danger:hover { background: rgba(244,115,111,.12); }
+
+
+/* 红点不被裁切 */
+.topbar { overflow: visible; }
+.icon-btn { overflow: visible; }
+.mail-btn { overflow: visible; }
+#notifBtn, #friendsBtn { position: relative; overflow: visible; }
+.mail-dot {
+  position: absolute; top: -7px; right: -8px; z-index: 3;
+  min-width: 17px; height: 17px; line-height: 17px;
+  padding: 0 4px; border-radius: 9px;
+  background: #f4736f; color: #fff;
+  font-size: 10px; font-weight: 700; text-align: center;
+  box-shadow: 0 0 0 2px #0b1118;      /* 用描边把它从按钮上"抬"出来 */
+  pointer-events: none;
+}
+.mail-dot.hidden { display: none; }
