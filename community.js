@@ -2390,6 +2390,7 @@ export async function openFriends() {
       '<button class="fr-tab on" data-tab="list" role="tab">好友列表 <i id="cntList">0</i></button>' +
       '<button class="fr-tab" data-tab="req" role="tab">申请管理 <i id="cntReq">0</i></button>' +
       '<button class="fr-tab" data-tab="add" role="tab">添加好友</button>' +
+      '<button class="fr-tab" data-tab="blocked" role="tab">黑名单 <i id="cntBlocked">0</i></button>' +
     '</nav>' +
     '<div class="fr-panel" id="frPanel"></div>' +
     '<p class="fr-foot" id="frFoot"></p>' +
@@ -2413,19 +2414,24 @@ export async function openFriends() {
       accepted.sort((x, y) => (y.starred ? 1 : 0) - (x.starred ? 1 : 0));
       const incoming = await rest('/rest/v1/' + FR + '?select=id,requester,created_at&target=eq.' + encodeURIComponent(me) + '&status=eq.pending') || [];
       const outgoing = await rest('/rest/v1/' + FR + '?select=id,target,created_at&requester=eq.' + encodeURIComponent(me) + '&status=eq.pending') || [];
+      const blockedRows = await rest('/rest/v1/blocks?select=blocked_email&owner_email=eq.' + encodeURIComponent(me)) .catch(() => []) || [];
+      const blocked = (blockedRows || []).map((r) => r.blocked_email);
       const emails = Array.from(new Set([].concat(
         accepted.map((x) => (x.requester === me ? x.target : x.requester)),
         incoming.map((x) => x.requester),
-        outgoing.map((x) => x.target)
+        outgoing.map((x) => x.target),
+        blocked
       )));
       const pm = {};
       if (emails.length) {
         const ps = await rest('/rest/v1/profiles?select=user_email,name,avatar,uid,bio&user_email=in.(' + emails.map((e) => '"' + e + '"').join(',') + ')') || [];
         for (const p of ps) pm[p.user_email] = p;
       }
-      DATA = { accepted, incoming, outgoing, pm };
+      DATA = { accepted, incoming, outgoing, pm, blocked };
       cntList.textContent = accepted.length;
       cntReq.textContent = incoming.length;
+      const cb = box.querySelector('#cntBlocked');
+      if (cb) cb.textContent = blocked.length;
     } catch (e) {
       panel.innerHTML = '<div class="fr-empty">读取失败：' + esc(e.message) + '</div>';
     }
@@ -2460,6 +2466,25 @@ export async function openFriends() {
       '<div class="fr-acts"><button class="btn btn-sm" data-cancel="' + x.id + '">撤回</button></div></div>').join('');
     if (!inc && !out) return '<div class="fr-empty">暂时没有申请</div>';
     return (inc ? '<div class="fr-group">收到的</div>' + inc : '') + (out ? '<div class="fr-group">发出的</div>' + out : '');
+  };
+
+  const viewBlocked = () => {
+    const list = (DATA.blocked || []).map((em) => {
+      const p = DATA.pm[em] || {};
+      const img = String(p.avatar || '');
+      return '<div class="fr-item">' +
+        avatarHtml({ avatar: img.startsWith('data:') ? '🎮' : (img || '🎮'), img: img.startsWith('data:') ? img : '' }, 40) +
+        '<div class="fr-info"><div class="fr-name">' + esc(p.name || em.split('@')[0]) + '<span class="post-uid">#' + esc(p.uid || '----') + '</span></div>' +
+        '<div class="fr-sub">' + esc(p.bio || '已被你拉黑') + '</div></div>' +
+        '<div class="fr-acts"><button class="btn btn-sm" data-unblock="' + esc(em) + '">解除拉黑</button></div></div>';
+    }).join('');
+    return '<div class="fr-addbox">' +
+      '<p class="fr-tip">输入对方 10 位 UID 拉黑；拉黑后你看不到 TA 的留言，TA 也不能给你留言。</p>' +
+      '<input class="input" id="frBlockUid" inputmode="numeric" maxlength="10" placeholder="例如 8802317645">' +
+      '<button class="btn btn-primary" id="frBlockBtn" style="margin-top:10px;width:100%">拉黑这个 UID</button>' +
+      '<p class="fr-msg" id="frBlockMsg"></p>' +
+      (list ? '<div class="fr-group">已拉黑 ' + DATA.blocked.length + ' 人</div>' + list : '<div class="fr-empty">黑名单是空的</div>') +
+      '</div>';
   };
 
   const viewAdd = () => '<div class="fr-addbox">' +
@@ -2517,16 +2542,49 @@ export async function openFriends() {
         } catch (e) { msgEl.className = 'fr-msg err'; msgEl.textContent = '失败：' + e.message; }
       };
     }
+
+    // 黑名单：拉黑 / 解除
+    const blockBtn = panel.querySelector('#frBlockBtn');
+    if (blockBtn) {
+      blockBtn.onclick = async () => {
+        const uid = (panel.querySelector('#frBlockUid').value || '').trim();
+        const msgEl = panel.querySelector('#frBlockMsg');
+        if (!/^\d{10}$/.test(uid)) { msgEl.className = 'fr-msg err'; msgEl.textContent = 'UID 是 10 位数字'; return; }
+        msgEl.className = 'fr-msg'; msgEl.textContent = '查找中…';
+        try {
+          const ps = await rest('/rest/v1/profiles?select=user_email,name,uid&uid=eq.' + uid + '&limit=1');
+          const p = ps && ps[0];
+          if (!p) { msgEl.className = 'fr-msg err'; msgEl.textContent = '没有找到这个 UID'; return; }
+          if (p.user_email === me) { msgEl.className = 'fr-msg err'; msgEl.textContent = '不能拉黑自己'; return; }
+          await blockUser(p.user_email);
+          msgEl.className = 'fr-msg ok'; msgEl.textContent = '已拉黑 ' + (p.name || uid);
+          await loadAll();
+          rerender('blocked');
+        } catch (e) { msgEl.className = 'fr-msg err'; msgEl.textContent = '失败：' + e.message; }
+      };
+    }
+    panel.querySelectorAll('[data-unblock]').forEach((b) => {
+      b.onclick = async () => {
+        try {
+          await unblockUser(b.dataset.unblock);
+          toast('已解除拉黑');
+          await loadAll();
+          rerender('blocked');
+        } catch (e) { toast('失败：' + e.message); }
+      };
+    });
   };
 
   const rerender = (tab) => {
     box.querySelectorAll('.fr-tab').forEach((t) => t.classList.toggle('on', t.dataset.tab === tab));
-    panel.innerHTML = tab === 'list' ? viewList() : tab === 'req' ? viewReq() : viewAdd();
+    panel.innerHTML = tab === 'list' ? viewList() : tab === 'req' ? viewReq() : tab === 'blocked' ? viewBlocked() : viewAdd();
     const foot = box.querySelector('#frFoot');
     if (foot) {
       foot.textContent = tab === 'add'
         ? '输入对方的 10 位 UID，就能加好友'
-        : '共 ' + DATA.accepted.length + ' 位好友 · 去「添加好友」输入 UID 认识更多同好';
+        : tab === 'blocked'
+          ? '黑名单里的人：你看不到 TA 的留言，TA 也留不了言'
+          : '共 ' + DATA.accepted.length + ' 位好友 · 去「添加好友」输入 UID 认识更多同好';
     }
     bind(tab);
   };

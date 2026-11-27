@@ -1785,6 +1785,11 @@ textarea.input { resize: vertical; min-height: 96px; }
 .author-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 20px; font-weight: 700; line-height: 1.2; }
 .author-bio-line { margin: 7px 0 0; font-size: 13px; color: var(--text-2); line-height: 1.6; }
 .author-actions { flex: none; display: flex; gap: 8px; }
+.author-actions { flex-wrap: wrap; }
+.author-actions .btn.on {
+  color: #ff8fa8; border-color: rgba(255, 143, 168, 0.5); background: rgba(255, 143, 168, 0.12);
+}
+.author-actions #authorLike { font-variant-numeric: tabular-nums; }
 
 .author-stats { display: flex; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .author-stat { flex: 1; min-width: 0; padding: 8px 12px; border-radius: 10px; background: #0b131b; border: 1px solid var(--line); }
