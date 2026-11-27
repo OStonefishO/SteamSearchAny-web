@@ -1303,7 +1303,7 @@ function boot() {
   import('./community.js').then((m) => {
     const btn = $('#authBtn');
     if (btn) {
-      btn.textContent = m.authLabel() === '登录' ? '登录' : m.authLabel();
+      m.refreshAuthButton();
       btn.addEventListener('click', () => m.openLogin());
     }
   });

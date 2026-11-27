@@ -74,13 +74,13 @@ export async function listPosts(limit = 30) {
   return rows || [];
 }
 
-export async function createPost({ gameId, gameName, body }) {
+export async function createPost({ gameId, gameName, body, authorName }) {
   const s = session();
   if (!s) throw new Error('请先登录');
   return call('/rest/v1/posts', {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
-    body: [{ game_id: gameId, game_name: gameName, body, author_name: s.email.split('@')[0] }],
+    body: [{ game_id: gameId, game_name: gameName, body, author_name: authorName || s.email.split('@')[0] }],
   });
 }
 
@@ -92,13 +92,13 @@ export async function listComments(postIds) {
   return rows || [];
 }
 
-export async function createComment({ postId, body }) {
+export async function createComment({ postId, body, authorName }) {
   const s = session();
   if (!s) throw new Error('请先登录');
   return call('/rest/v1/comments', {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
-    body: [{ post_id: postId, body, author_name: s.email.split('@')[0] }],
+    body: [{ post_id: postId, body, author_name: authorName || s.email.split('@')[0] }],
   });
 }
 
