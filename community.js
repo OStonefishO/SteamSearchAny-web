@@ -802,7 +802,11 @@ export async function openAuthor(name, uid) {
 
   const pane = box.querySelector('#authorPane');
 
+  let currentWall = wall;   // 当前渲染的留言列表（发完留言先本地插一条）
+
   const paintWall = (rows) => {
+    rows = rows || [];
+    currentWall = rows;
     pane.innerHTML = `<div class="wall-box">
       ${me ? `<div class="wall-add"><input class="input sm" id="wallInput" maxlength="120" placeholder="${me === target ? '给自己留句话…' : '给 TA 留句话…'}">
         <button class="btn btn-sm btn-primary" id="wallSend">发送</button></div>`
@@ -835,7 +839,11 @@ export async function openAuthor(name, uid) {
           input.value = '';
           toast('留言成功');
           pushNotif({ user_email: target, kind: 'wall', post_title: '主页留言', from_name: p.name || me, body });
-          paintWall(await loadWall(target));
+          // 先把这条挂到本地列表上，立刻可见（哪怕 wall_messages 的 SELECT 策略还没配好）
+          const local = { id: 'tmp-' + Date.now(), author_email: me, author_name: p.name, author_avatar: p.img || p.avatar, body, created_at: new Date().toISOString() };
+          paintWall([local].concat(currentWall.filter((w) => w.id !== local.id)));
+          // 再回云端拉一次，拉到了就用云端的数据覆盖
+          loadWall(target).then((fresh) => { if (fresh && fresh.length) paintWall(fresh); }).catch(() => {});
         } catch (e) {
           const msg = String(e.message || e);
           // 42501 = RLS 拒绝；把当前身份一起打出来，方便判断是策略问题还是没登录
