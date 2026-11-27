@@ -37,7 +37,8 @@ function applyUi() {
 }
 
 const state = {
-  view: 'random',
+  view: 'explore',
+  sub: 'random',
   mode: 'hidden',
   tagIds: [],
   tagList: [],
@@ -359,6 +360,7 @@ function renderHero(g) {
       <div class="hero-actions">
         <button class="btn" id="heroDetail">看看详情</button>
         <button class="btn" id="heroSimilar">以此找相似</button>
+        <button class="btn${favHas(g.id) ? ' on' : ''}" id="heroFav">${favHas(g.id) ? '★ 已收藏' : '☆ 收藏'}</button>
         <a class="btn btn-quiet" href="${STORE(g.id)}" target="_blank" rel="noreferrer">Steam ↗</a>
       </div>
     </div>
@@ -376,6 +378,15 @@ function renderHero(g) {
       return;
     }
     if (ev.target.closest('#heroDetail')) openDetail(g);
+    if (ev.target.closest('#heroFav')) {
+      const on = toggleFav(g.id, g.name);
+      const b = $('#heroFav');
+      if (b) {
+        b.textContent = on ? '★ 已收藏' : '☆ 收藏';
+        b.classList.toggle('on', on);
+      }
+      return;
+    }
     if (ev.target.closest('#heroSimilar')) {
       addSeed({ id: g.id, name: g.name, img: g.header || CDN(g.id, 'header') });
       switchView('similar');
@@ -671,6 +682,7 @@ async function openDetail(g) {
         <div class="hero-actions" style="margin-top:22px">
           <a class="btn btn-primary" href="${STORE(full.id)}" target="_blank" rel="noreferrer">在 Steam 打开 ↗</a>
           <button class="btn" id="modalShare">分享给好友</button>
+          <button class="btn" id="modalShot">生成分享图</button>
           <button class="btn" id="modalSeed">以此找相似</button>
         </div>
       </div>`;
@@ -693,6 +705,14 @@ async function openDetail(g) {
         m.shareGame(full);
       } catch (e) {
         toast('分享面板没加载出来：' + e.message);
+      }
+    });
+    $('#modalShot', content)?.addEventListener('click', async () => {
+      try {
+        const m = await import('./community.js?v=' + Date.now());
+        m.shareGameImage(full);
+      } catch (e) {
+        toast('分享图没生成出来：' + e.message);
       }
     });
   } catch (e) {
@@ -834,6 +854,7 @@ async function openInfo(g) {
         <a class="btn" href="${yt}" target="_blank" rel="noreferrer">YouTube ↗</a>
         <button class="btn" id="infoSeed">加为种子</button>
         <button class="btn" id="infoShareFriend">分享给好友</button>
+        <button class="btn" id="infoShot">生成分享图</button>
         <button class="btn" id="infoShare">分享到社区</button>
       <button class="btn btn-quiet" id="infoDetail">完整详情</button>
       </div>
@@ -852,6 +873,11 @@ async function openInfo(g) {
     import('./community.js?v=' + Date.now())
       .then((m) => m.shareGame(full))
       .catch((e) => toast('分享面板没加载出来：' + e.message));
+  });
+  $('#infoShot', content)?.addEventListener('click', () => {
+    import('./community.js?v=' + Date.now())
+      .then((m) => m.shareGameImage(full))
+      .catch((e) => toast('分享图没生成出来：' + e.message));
   });
 
   $('#infoDetail', content)?.addEventListener('click', () => openDetail(full));
@@ -877,15 +903,38 @@ async function openInfo(g) {
 }
 
 // ---------------- 视图 ----------------
+const EXPLORE_SUBS = ['random', 'similar', 'events', 'coming'];
+
+function switchSub(sub) {
+  if (!EXPLORE_SUBS.includes(sub)) sub = 'random';
+  state.sub = sub;
+  $$('.subtab').forEach((b) => b.classList.toggle('active', b.dataset.sub === sub));
+  EXPLORE_SUBS.forEach((s) => $('#view-' + s)?.classList.toggle('hidden', s !== sub));
+  if (sub === 'similar') setTimeout(() => $('#seedInput')?.focus(), 60);
+  if (sub === 'events' && !state.eventsLoaded) {
+    state.eventsLoaded = true;
+    renderEvents();
+  }
+  if (sub === 'coming') renderComing();
+}
+
 function switchView(view) {
-  state.view = view;
-  $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === view));
-  $('#view-me')?.classList.toggle('hidden', view !== 'me');
-  $('#view-random').classList.toggle('hidden', view !== 'random');
-  $('#view-similar').classList.toggle('hidden', view !== 'similar');
-  $('#view-events')?.classList.toggle('hidden', view !== 'events');
-  $('#view-community')?.classList.toggle('hidden', view !== 'community');
-  if (view === 'me') {
+  // 「盲盒发现 / 相似追踪 / Steam 现场 / 即将上线」都算 探索游戏 的子页
+  if (EXPLORE_SUBS.includes(view)) {
+    state.view = 'explore';
+    state.sub = view;
+  } else {
+    state.view = view;
+  }
+  const v = state.view;
+  $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === v));
+  $('#exploreBar')?.classList.toggle('hidden', v !== 'explore');
+  $('#view-me')?.classList.toggle('hidden', v !== 'me');
+  $('#view-community')?.classList.toggle('hidden', v !== 'community');
+  EXPLORE_SUBS.forEach((s) => $('#view-' + s)?.classList.toggle('hidden', !(v === 'explore' && state.sub === s)));
+
+  if (v === 'explore') switchSub(state.sub);
+  if (v === 'me') {
     const box = $('#meBody');
     import('./community.js?v=' + Date.now())
       .then((m) => m.renderMe(box))
@@ -893,15 +942,10 @@ function switchView(view) {
         box.innerHTML = '<div class="empty-state">「我的信息」加载失败：' + e.message + '</div>';
       });
   }
-  if (view === 'community') {
+  if (v === 'community') {
     import('./community.js?v=' + Date.now()).then((m) => m.renderCommunity($('#communityBody'))).catch((e) => {
       $('#communityBody').innerHTML = '<div class="empty-state">社区加载失败：' + e.message + '</div>';
     });
-  }
-  if (view === 'similar') setTimeout(() => $('#seedInput')?.focus(), 60);
-  if (view === 'events' && !state.eventsLoaded) {
-    state.eventsLoaded = true;
-    renderEvents();
   }
 }
 
@@ -1138,6 +1182,59 @@ async function renderEvents() {
     .join('') || `<div class="empty-state"><span class="big">🕳️</span>现场数据里没有与语料重合的游戏</div>`;
 }
 
+// ---------------- 即将上线 ----------------
+let comingData = null;
+let comingCat = 'soon';
+
+async function loadComing(force) {
+  if (comingData && !force) return comingData;
+  const url = new URL('data/upcoming.json', document.baseURI).href;
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  comingData = await res.json();
+  return comingData;
+}
+
+function comingCardHtml(g) {
+  const dateTxt = g.release || (g.soon ? '即将推出' : '待定');
+  const sub = [g.price && g.price !== '¥0.00' ? g.price : null, g.demo ? '有 Demo' : null].filter(Boolean).join(' · ') || '还没定价';
+  return `<a class="coming-card" href="${STORE(g.id)}" target="_blank" rel="noreferrer" aria-label="${esc(g.name)}">
+    <div class="coming-media">
+      <img src="${esc(g.header || CDN(g.id, 'header'))}" alt="${esc(g.name)}" loading="lazy" decoding="async" onerror="this.onerror=null;this.style.opacity=.12">
+      ${favBtnHtml(g.id)}
+      <span class="coming-date">${esc(dateTxt)}</span>
+    </div>
+    <div class="coming-name">${esc(g.name)}</div>
+    <div class="coming-sub">${esc(sub)}</div>
+  </a>`;
+}
+
+async function renderComing(force) {
+  const grid = $('#comingGrid');
+  if (!grid) return;
+  const countEl = $('#comingCount');
+  if (!comingData || force) grid.innerHTML = '<div class="empty-state"><span class="big">🛰️</span>正在读取即将上线的名单…</div>';
+  let data;
+  try {
+    data = await loadComing(force);
+  } catch (e) {
+    grid.innerHTML = '<div class="empty-state"><span class="big">📡</span>还没抓到「即将上线」的数据<br>' +
+      '<span style="font-size:12px;color:var(--text-4)">GitHub Action 定时抓取，等下一轮；本地开发时这里为空是正常的</span></div>';
+    if (countEl) countEl.textContent = '';
+    return;
+  }
+  const all = Array.isArray(data.items) ? data.items : [];
+  const list = comingCat === 'demo' ? all.filter((g) => g.demo) : all.filter((g) => g.soon !== false);
+  if (countEl) countEl.textContent = `${list.length} 款 · 数据 ${data.built ? String(data.built).slice(0, 10) : '未知'}`;
+  if (!list.length) {
+    grid.innerHTML = comingCat === 'demo'
+      ? '<div class="empty-state">这批名单里还没有带 Demo 的，下一轮抓取会补上</div>'
+      : '<div class="empty-state">名单是空的，等下一轮抓取</div>';
+    return;
+  }
+  grid.innerHTML = list.map(comingCardHtml).join('');
+}
+
 function bindEvents() {
   $('#eventsBody')?.addEventListener('click', (ev) => {
     const card = ev.target.closest('[data-eid]');
@@ -1145,6 +1242,16 @@ function bindEvents() {
     const g = eventIndex.get(Number(card.dataset.eid));
     if (g) openInfo(g);
   });
+  $$('#comingCat .seg-btn').forEach((b) =>
+    b.addEventListener('click', () => {
+      $$('#comingCat .seg-btn').forEach((x) => x.classList.remove('active'));
+      b.classList.add('active');
+      comingCat = b.dataset.cat === 'demo' ? 'demo' : 'soon';
+      renderComing();
+    })
+  );
+  $('#comingReload')?.addEventListener('click', () => renderComing(true));
+  $$('.subtab').forEach((b) => b.addEventListener('click', () => switchView(b.dataset.sub)));
 }
 
 // ---------------- 启动 ----------------
@@ -1173,7 +1280,7 @@ function boot() {
 
   // #me / #community 之类的深链：直接开对应视图
   const bootView = (location.hash || '').replace(/^#/, '');
-  if (['me', 'random', 'similar', 'events', 'community'].includes(bootView)) switchView(bootView);
+  if (['me', 'explore', 'random', 'similar', 'events', 'coming', 'community'].includes(bootView)) switchView(bootView);
 
   // 「我的信息」里点收藏卡 / 点帖子 → 由这里跳转，别让两个页面互相 import
   document.addEventListener('lh:gotoCommunity', () => switchView('community'));

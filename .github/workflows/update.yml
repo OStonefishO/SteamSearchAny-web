@@ -1,9 +1,10 @@
 name: update-games
 
-# 每天 03:10 UTC（北京时间 11:10）抓一次新上架游戏，补进语料后自动重建 Pages
+# 每 6 小时抓一轮（北京时间 03:10 / 09:10 / 15:10 / 21:10）：
+#   新上架 + 即将发售 + 带 Demo + Steam 现场（特惠/新品/即将推出）
 on:
   schedule:
-    - cron: '10 3 * * *'
+    - cron: '10 */6 * * *'
   workflow_dispatch:
 
 permissions:
@@ -16,7 +17,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
 
@@ -25,19 +26,25 @@ jobs:
           node-version: '20'
 
       - name: 增量同步新游戏
-        run: node tools/sync.mjs --limit=4000 --tags=40 --pages=3
+        run: node tools/sync.mjs --limit=6000 --tags=50 --pages=5
+
+      - name: 抓「即将上线」+ 带 Demo
+        run: node tools/fetch-upcoming.mjs --pages=10
+        continue-on-error: true
 
       - name: 抓 Steam 现场（特惠 / 新品 / 即将推出）
         run: node tools/fetch-events.mjs
+        continue-on-error: true
 
       - name: 补系统需求与截图（每轮一批）
-        run: node tools/fetch-extra.mjs --limit=1500
+        run: node tools/fetch-extra.mjs --limit=2500
 
       - name: 提交并推送
         run: |
           git config user.name "lighthouse-bot"
           git config user.email "lighthouse-bot@users.noreply.github.com"
           git add data/games.json data/version.json data/changelog.json data/events.json CHANGELOG.md
+          if [ -f data/upcoming.json ]; then git add data/upcoming.json; fi
           if git diff --cached --quiet; then
             echo "没有变化，跳过提交"
             exit 0
@@ -49,3 +56,6 @@ jobs:
         run: |
           echo "### 语料更新完成" >> $GITHUB_STEP_SUMMARY
           node -e "const v=require('./data/version.json');console.log('当前语料：'+v.count+' 款 · '+v.tags+' 标签 · '+v.built)" >> $GITHUB_STEP_SUMMARY
+          if [ -f data/upcoming.json ]; then
+            node -e "const u=require('./data/upcoming.json');console.log('即将发售 '+u.counts.soon+' 款 · 带 Demo '+u.counts.demo+' 款')" >> $GITHUB_STEP_SUMMARY
+          fi

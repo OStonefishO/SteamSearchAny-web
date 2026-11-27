@@ -39,7 +39,7 @@
 </script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗼</text></svg>">
 <link rel="preload" href="fonts/inter-500.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=2026-11-26-11777-6375364-3b10">
+<link rel="stylesheet" href="style.css?v=2026-11-26-11777-6375364-3gl3">
   <meta property="og:title" content="Steam 灯塔 · 找到没人注意到的那些游戏">
   <meta property="og:description" content="随机盲盒发现冷门佳作 + 多游戏加权相似检索（静态版，离线可跑）">
 </head>
@@ -85,9 +85,7 @@
 
   <nav class="tabs" role="tablist">
     <button class="tab" data-view="me" role="tab">我的信息</button>
-    <button class="tab active" data-view="random" role="tab">盲盒发现</button>
-    <button class="tab" data-view="similar" role="tab">相似追踪</button>
-    <button class="tab" data-view="events" role="tab">Steam 现场</button>
+    <button class="tab active" data-view="explore" role="tab">探索游戏</button>
     <button class="tab" data-view="community" role="tab">社区</button>
   </nav>
 
@@ -115,6 +113,14 @@
 </header>
 
 <main>
+  <!-- 探索游戏：四块内容共用一个入口，内部切换 -->
+  <nav class="subnav" id="exploreBar" role="tablist">
+    <button class="subtab active" data-sub="random" role="tab">盲盒发现</button>
+    <button class="subtab" data-sub="similar" role="tab">相似追踪</button>
+    <button class="subtab" data-sub="events" role="tab">Steam 现场</button>
+    <button class="subtab" data-sub="coming" role="tab">即将上线</button>
+  </nav>
+
   <!-- ================= 盲盒发现 ================= -->
   <section class="view" id="view-random">
     <div class="view-head">
@@ -279,6 +285,29 @@
     <div id="eventsBody"></div>
   </section>
 
+  <!-- ================= 即将上线 ================= -->
+  <section class="view hidden" id="view-coming">
+    <div class="view-head">
+      <div>
+        <h2>即将上线</h2>
+        <p id="comingHint">还没发售、但已经能在 Steam 加愿望单的那些；顺手把带 Demo 的也抓了过来。</p>
+      </div>
+      <div class="section-actions">
+        <button class="btn btn-sm" id="comingReload">重新读取</button>
+      </div>
+    </div>
+
+    <div class="toolbar coming-toolbar">
+      <div class="seg" id="comingCat">
+        <button class="seg-btn active" data-cat="soon">即将发售</button>
+        <button class="seg-btn" data-cat="demo">带 Demo</button>
+      </div>
+      <span class="coming-count" id="comingCount"></span>
+    </div>
+
+    <div class="coming-grid" id="comingGrid"></div>
+  </section>
+
   <!-- ================= 社区 ================= -->
   <section class="view hidden" id="view-community">
     <div class="view-head">
@@ -332,8 +361,8 @@
 
 <script src="config.js"></script>
   <script>window.LIGHTHOUSE_STATIC = true;</script>
-<script src="local-api.js?v=2026-11-26-11777-6375364-3b10"></script>
-<script src="app.js?v=2026-11-26-11777-6375364-3b10" type="module"></script>
+<script src="local-api.js?v=2026-11-26-11777-6375364-3gl3"></script>
+<script src="app.js?v=2026-11-26-11777-6375364-3gl3" type="module"></script>
 
 <script id="LH_BOOT_AUTH">
 // 独立绑定登录按钮：即使主程序还没就绪也能打开登录框

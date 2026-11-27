@@ -1610,3 +1610,63 @@ textarea.input { resize: vertical; min-height: 96px; }
 /* 没有封面图的弹窗：.m-body 那个 -44px 负边距是给 m-hero 叠图用的，
    单独出现时会把 h3 顶到弹窗上沿切掉一截 —— 第一个子元素时取消它 */
 .m-body:first-child { margin-top: 0 !important; }
+
+
+/* ==========================================================================
+   探索游戏（子导航） + 即将上线
+   ========================================================================== */
+.subnav {
+  display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  max-width: 100%; width: fit-content;
+  padding: 5px; margin: 0 0 18px;
+  background: #0b141d; border: 1px solid var(--line-2); border-radius: 999px;
+}
+.subtab {
+  height: 32px; padding: 0 18px; border: 0; border-radius: 999px; cursor: pointer;
+  background: transparent; color: var(--text-3);
+  font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: background 0.16s, color 0.16s;
+}
+.subtab:hover { color: var(--text-2); }
+.subtab.active {
+  background: rgba(76, 194, 255, 0.16); color: var(--accent);
+  box-shadow: inset 0 0 0 1px rgba(76, 194, 255, 0.35);
+}
+
+.coming-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.coming-count { font-size: 12px; color: var(--text-4); }
+
+.coming-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; }
+.coming-card { display: block; text-decoration: none; color: inherit; outline: none; }
+.coming-media {
+  position: relative; aspect-ratio: 460 / 215; overflow: hidden;
+  border-radius: 12px; border: 1px solid var(--line); background: #0a1017;
+}
+.coming-media img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.45s ease, filter 0.2s ease; }
+.coming-card:hover .coming-media { border-color: var(--line-2); }
+.coming-card:hover .coming-media img { transform: scale(1.04); filter: brightness(1.06); }
+.coming-card:hover .card-fav { opacity: 1; }
+.coming-date {
+  position: absolute; left: 7px; top: 7px; padding: 2px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; color: #cfe6f7;
+  background: rgba(5, 9, 14, 0.78); border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(3px);
+}
+.coming-name {
+  margin-top: 8px; font-size: 13px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.coming-sub { margin-top: 2px; font-size: 11.5px; color: var(--text-4); }
+
+/* 顶部大卡的收藏按钮 */
+.hero-actions .btn.on {
+  color: #ffd166; border-color: rgba(255, 209, 102, 0.5);
+  background: rgba(255, 209, 102, 0.12);
+}
+
+@media (max-width: 620px) {
+  .subnav { width: 100%; justify-content: space-between; }
+  .subtab { padding: 0 12px; font-size: 12px; }
+  .coming-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+}

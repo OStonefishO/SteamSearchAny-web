@@ -2465,6 +2465,164 @@ async function openPostShot(post) {
   }
 }
 
+/* ---------- 游戏生成分享图 ---------- */
+function loadImageCors(src) {
+  return new Promise((resolve) => {
+    if (!src) return resolve(null);
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+function drawChip(ctx, x, y, text, color, bg, border) {
+  ctx.font = '600 13px "PingFang SC","Microsoft YaHei",system-ui,sans-serif';
+  const tw = ctx.measureText(text).width;
+  const w = tw + 22;
+  roundRect(ctx, x, y, w, 26, 13);
+  ctx.fillStyle = bg;
+  ctx.fill();
+  ctx.strokeStyle = border;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.fillText(text, x + 11, y + 18);
+  return w;
+}
+
+async function buildGameShot(g) {
+  const W = 800;
+  const PAD = 40;
+  const F = (w, s) => w + ' ' + s + 'px "PingFang SC","Microsoft YaHei","Hiragino Sans GB",system-ui,sans-serif';
+  const rev = g.rev || {};
+  const pct = typeof rev.pct === 'number' && rev.pct ? Math.round(rev.pct) : null;
+  const desc = String(g.desc || '').replace(/\s+/g, ' ').trim();
+
+  const headerH = 300;
+  const probe = document.createElement('canvas').getContext('2d');
+  probe.font = F(700, 34);
+  const nameLines = wrapText(probe, g.name || '', W - PAD * 2).slice(0, 2);
+  probe.font = F(400, 16.5);
+  const descLines = desc ? wrapText(probe, desc, W - PAD * 2).slice(0, 3) : [];
+
+  const nameH = nameLines.length * 44;
+  const descH = descLines.length ? descLines.length * 27 + 12 : 0;
+  const H = headerH + 28 + nameH + 16 + 26 + 18 + descH + 62;
+
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+
+  ctx.fillStyle = '#0b1119';
+  ctx.fillRect(0, 0, W, H);
+
+  // 头部图（Steam CDN 带 CORS 才画，拿不到就渐变兜底，绝不让 canvas 变 tainted）
+  const img = await loadImageCors(g.header || 'https://cdn.akamai.steamstatic.com/steam/apps/' + g.id + '/header.jpg');
+  if (img && img.width) {
+    const ratio = Math.max(W / img.width, headerH / img.height);
+    const dw = img.width * ratio;
+    const dh = img.height * ratio;
+    ctx.drawImage(img, (W - dw) / 2, (headerH - dh) / 2, dw, dh);
+    const fade = ctx.createLinearGradient(0, headerH - 130, 0, headerH);
+    fade.addColorStop(0, 'rgba(11,17,25,0)');
+    fade.addColorStop(1, '#0b1119');
+    ctx.fillStyle = fade;
+    ctx.fillRect(0, headerH - 130, W, 130);
+  } else {
+    const grad = ctx.createLinearGradient(0, 0, W, headerH);
+    grad.addColorStop(0, '#12212d');
+    grad.addColorStop(1, '#0b1119');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, headerH);
+    ctx.font = F(400, 64);
+    ctx.fillStyle = 'rgba(76,194,255,.35)';
+    ctx.textAlign = 'center';
+    ctx.fillText('🎮', W / 2, headerH / 2 + 20);
+    ctx.textAlign = 'left';
+  }
+
+  let y = headerH + 24;
+
+  // 游戏名
+  ctx.font = F(700, 34);
+  ctx.fillStyle = '#f2f8ff';
+  for (const ln of nameLines) {
+    ctx.fillText(ln, PAD, y + 32);
+    y += 44;
+  }
+
+  // 角标
+  y += 16;
+  let cx = PAD;
+  const chip = (txt, color, bg, border) => {
+    cx += drawChip(ctx, cx, y, txt, color, bg, border) + 8;
+  };
+  if (pct !== null) chip(pct + '% 好评', pct >= 90 ? '#b6e04a' : pct >= 75 ? '#ffbb55' : '#f4736f', 'rgba(255,255,255,.05)', 'rgba(255,255,255,.14)');
+  else chip('暂无评测', '#7f95a8', 'rgba(255,255,255,.05)', 'rgba(255,255,255,.14)');
+  if (rev.total) chip(String(rev.total) + ' 条评测', '#b3c6d6', 'rgba(255,255,255,.05)', 'rgba(255,255,255,.14)');
+  if (g.year) chip(String(g.year), '#b3c6d6', 'rgba(255,255,255,.05)', 'rgba(255,255,255,.14)');
+  if (g.price) chip(String(g.price), '#b3c6d6', 'rgba(255,255,255,.05)', 'rgba(255,255,255,.14)');
+  if (g.gem != null && (rev.total || 0) < 10000) chip('冷门 ' + g.gem, '#9fd6f5', 'rgba(76,194,255,.12)', 'rgba(76,194,255,.4)');
+
+  y += 54;
+
+  // 简介
+  if (descLines.length) {
+    ctx.font = F(400, 16.5);
+    ctx.fillStyle = '#b3c6d6';
+    for (const ln of descLines) {
+      ctx.fillText(ln, PAD, y + 20);
+      y += 27;
+    }
+  }
+
+  // 页脚
+  const fy = H - 52;
+  ctx.strokeStyle = '#1b2836';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(PAD, fy);
+  ctx.lineTo(W - PAD, fy);
+  ctx.stroke();
+  ctx.font = F(600, 14);
+  ctx.fillStyle = '#7f95a8';
+  ctx.fillText('Steam 灯塔 · 照亮没人注意到的那些游戏', PAD, fy + 30);
+  ctx.font = F(400, 12.5);
+  ctx.fillStyle = '#4d6373';
+  ctx.textAlign = 'right';
+  ctx.fillText('ostonefisho.github.io/SteamSearchAny-web', W - PAD, fy + 30);
+  ctx.textAlign = 'left';
+
+  return cv;
+}
+
+export async function shareGameImage(g) {
+  const m = document.getElementById('modal');
+  const box = document.getElementById('modalContent');
+  if (!m || !g) return;
+  m.hidden = false;
+  box.innerHTML = '<div class="m-body"><h3>分享图</h3><div class="empty-state"><span class="spin"></span>正在生成…</div></div>';
+  try {
+    const cv = await buildGameShot(g);
+    const url = cv.toDataURL('image/png');
+    box.innerHTML = '<div class="m-body"><h3>分享图</h3>' +
+      '<img class="shot-preview" src="' + url + '" alt="游戏分享图">' +
+      '<div class="share-actions">' +
+        '<a class="btn btn-primary" id="shotDl" download="lighthouse-game-' + Number(g.id || 0) + '.png" href="' + url + '">下载图片</a>' +
+        '<button class="btn" id="shotClose">关闭</button>' +
+      '</div>' +
+      '<p class="me-foot">发给朋友，或者贴到群里</p></div>';
+    box.querySelector('#shotClose').onclick = () => (m.hidden = true);
+  } catch (e) {
+    box.innerHTML = '<div class="m-body"><h3>分享图</h3><p class="form-msg form-err">生成失败：' + esc(e.message) + '</p></div>';
+  }
+}
+
 /* ================= 私聊 ================= */
 const CHAT_EMOJI = ['😀', '😂', '🥹', '😍', '🤔', '😎', '😭', '😡', '👍', '👎', '🎮', '🔥', '💡', '🎉', '❤️', '🌙'];
 
