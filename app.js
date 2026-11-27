@@ -181,7 +181,7 @@ function cardHtml(g, index, { score = false } = {}) {
     : `<span class="card-pill left">无评测</span>`;
   const right = score
     ? `<span class="card-pill score">${Math.min(99, Math.round(Math.pow(Math.max(0, g.score ?? 0), 0.7) * 100))}</span>`
-    : `<span class="card-pill right${(g.rev?.total || 0) >= 5000 ? ' hot' : ''}">${(g.rev?.total || 0) >= 5000 ? 'HOT' : '冷门 ' + (g.gem ?? 0)}</span>`;
+    : `<span class="card-pill right${(g.rev?.total || 0) >= 10000 ? ' hot' : ''}">${(g.rev?.total || 0) >= 10000 ? 'HOT' : '冷门 ' + (g.gem ?? 0)}</span>`;
   // 相似视图里好评率下移到副标题，避免两个角标抢戏
   const sub = score
     ? [g.year ?? null, rev.total ? `${rev.pct}%` : null, rev.total ? `${shortNum(rev.total)} 评测` : null]
@@ -262,7 +262,7 @@ function renderHero(g) {
   $('#heroCard').innerHTML = `
     <div class="hero-media">${imgTag(g.header || CDN(g.id, 'header'), g.name, g.id)}</div>
     <div class="hero-body">
-      <div class="hero-eyebrow"><span class="spark"></span>${rev.total >= 5000 ? '热门在卖 · ' + shortNum(rev.total) + ' 条评测' : '今日捞到 · 冷门指数 ' + gem}</div>
+      <div class="hero-eyebrow"><span class="spark"></span>${rev.total >= 10000 ? '热门在卖 · ' + shortNum(rev.total) + ' 条评测' : '今日捞到 · 冷门指数 ' + gem}</div>
       <h2 class="hero-title">${esc(g.name)}</h2>
       <div class="hero-chips">
         ${g.year ? `<span class="chip">${g.year}</span>` : ''}
@@ -282,7 +282,7 @@ function renderHero(g) {
       </div>
     </div>
     <div class="hero-stats">
-      <div class="stat hot"><b>${rev.total >= 5000 ? 'HOT' : gem}</b><span>${rev.total >= 5000 ? '热门' : '冷门指数'}</span></div>
+      <div class="stat hot"><b>${rev.total >= 10000 ? 'HOT' : gem}</b><span>${rev.total >= 10000 ? '热门' : '冷门指数'}</span></div>
       <div class="stat"><b>${rev.total ? shortNum(rev.total) : '0'}</b><span>评测数</span></div>
       <div class="stat"><b>${g.year ?? '—'}</b><span>发售</span></div>
     </div>`;
@@ -338,6 +338,7 @@ async function draw(count, { heroMode = true } = {}) {
   const params = new URLSearchParams({ mode: state.mode || 'hidden', count: String(count) });
   if (state.tagIds.length) params.set('tags', state.tagIds.join(','));
   if (state.demoMode && state.demoMode !== 'exclude') params.set('demo', state.demoMode);
+  if (state.hideHot) params.set('maxReviews', '9999');
   if (state.minPct) params.set('minPct', String(state.minPct));
   const after = $('#relFrom')?.value;
   const before = $('#relTo')?.value;
@@ -567,7 +568,7 @@ async function openDetail(g) {
           <span class="chip ${pctClass(rev.pct)}">${rev.pct ? rev.pct + '% 好评' : '暂无评测'}</span>
         </div>
         <div class="m-stats">
-          <div class="stat"><b>${(full.rev?.total || 0) >= 5000 ? 'HOT' : (full.gem ?? 0)}</b><span>${(full.rev?.total || 0) >= 5000 ? '热门' : '冷门指数'}</span></div>
+          <div class="stat"><b>${(full.rev?.total || 0) >= 10000 ? 'HOT' : (full.gem ?? 0)}</b><span>${(full.rev?.total || 0) >= 10000 ? '热门' : '冷门指数'}</span></div>
           <div class="stat"><b>${rev.total.toLocaleString()}</b><span>评测数</span></div>
           <div class="stat"><b>${esc(rev.label ?? '—')}</b><span>总评</span></div>
           <div class="stat"><b>${(full.tags ?? []).length}</b><span>标签</span></div>
@@ -693,7 +694,7 @@ async function openInfo(g) {
     <div class="m-body">
       <div class="info-title-row">
         <h3>${esc(full.name)}</h3>
-        ${(full.rev?.total || 0) >= 5000 ? `<span class="info-gem hot">HOT ${full.rev.total.toLocaleString()} 评测</span>` : full.gem ? `<span class="info-gem">冷门 ${full.gem}</span>` : ''}
+        ${(full.rev?.total || 0) >= 10000 ? `<span class="info-gem hot">HOT ${full.rev.total.toLocaleString()} 评测</span>` : full.gem ? `<span class="info-gem">冷门 ${full.gem}</span>` : ''}
       </div>
       ${full.alt ? `<div class="info-alt">${esc(full.alt)}</div>` : ''}
 
@@ -949,7 +950,7 @@ function eventCard(g, deal) {
       ${imgTag(g.cover || CDN(g.id, 'cover'), g.name, g.id)}
       ${deal?.discount ? `<span class="card-pill deal">-${deal.discount}%</span>` : ''}
       ${rev.total ? `<span class="card-pill left ${pctClass(rev.pct)}">${rev.pct}%</span>` : '<span class="card-pill left">无评测</span>'}
-      <span class="card-pill right${(g.rev?.total || 0) >= 5000 ? ' hot' : ''}">${(g.rev?.total || 0) >= 5000 ? 'HOT' : '冷门 ' + (g.gem ?? 0)}</span>
+      <span class="card-pill right${(g.rev?.total || 0) >= 10000 ? ' hot' : ''}">${(g.rev?.total || 0) >= 10000 ? 'HOT' : '冷门 ' + (g.gem ?? 0)}</span>
       <div class="card-foot">
         <div class="card-title">${esc(g.name)}</div>
         <div class="card-sub">${[g.year, price, rev.total ? `${shortNum(rev.total)} 评` : null].filter(Boolean).join(' · ')}</div>
@@ -991,6 +992,7 @@ async function renderEvents() {
   for (const it of ev.sections.specials || []) deals.set(it.id, it);
   for (const it of ev.sections.newReleases || []) deals.set(it.id, it);
 
+  const hideHot = state.hideHot;
   const section = (title, desc, items, opts = {}) => {
     const rows = items
       .map((it) => {
@@ -998,7 +1000,8 @@ async function renderEvents() {
         if (!g) return null;
         return { g, deal: deals.get(it.id) || it };
       })
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter((r) => !hideHot || (r.g.rev?.total || 0) < 10000);
     if (!rows.length) return '';
     if (opts.sortByGem) rows.sort((a, b) => (b.g.gem ?? 0) - (a.g.gem ?? 0));
     return `<div class="section-bar"><h3>${title}</h3><span class="hint">${desc}</span></div>
@@ -1008,7 +1011,7 @@ async function renderEvents() {
   const built = ev.built ? new Date(ev.built) : null;
   $('#eventsHint').textContent = `数据来自 Steam 商店接口${built ? ` · 更新于 ${built.getMonth() + 1}-${String(built.getDate()).padStart(2, '0')} ${String(built.getHours()).padStart(2, '0')}:${String(built.getMinutes()).padStart(2, '0')}` : ''} · 每天自动刷新`;
 
-  box.innerHTML = [
+  box.innerHTML = `<label class="chk" style="display:inline-flex;margin:2px 0 10px"><input type="checkbox" id="hideHotEv" ${state.hideHot ? 'checked' : ''}> 不看热门（评测 &gt; 1 万）</label>` + [
     section('💸 打折中的好价', '冷门佳作优先 —— 便宜、好评、还没人发现', ev.sections.specials || [], { sortByGem: true, limit: 24 }),
     section('🆕 刚上架', '最近发售的新作，先替你看看口碑', ev.sections.newReleases || [], { limit: 24 }),
     section('🧪 即将发售', '上架前先加进观察名单，Demo 见下方筛选', ev.sections.comingSoon || [], { limit: 18 }),
@@ -1148,6 +1151,23 @@ function boot() {
   });
 
   $('#findBtn').addEventListener('click', runSimilar);
+  $('#hideHot')?.addEventListener('change', (e) => {
+    state.hideHot = e.target.checked;
+    try { localStorage.setItem('lh.hideHot', state.hideHot ? '1' : '0'); } catch {}
+    roll();
+    if (state.view === 'events') renderEvents();
+  });
+  try { state.hideHot = localStorage.getItem('lh.hideHot') === '1'; } catch {}
+  const hhEl = $('#hideHot');
+  if (hhEl) hhEl.checked = Boolean(state.hideHot);
+
+  $('#eventsBody')?.addEventListener('change', (e) => {
+    if (e.target.id !== 'hideHotEv') return;
+    state.hideHot = e.target.checked;
+    try { localStorage.setItem('lh.hideHot', state.hideHot ? '1' : '0'); } catch {}
+    renderEvents();
+  });
+
   $('#loadMore').addEventListener('click', () => {
     state.shown = Math.min(state.shown + ui.perPage, state.allResults.length);
     renderResults();
