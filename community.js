@@ -758,7 +758,7 @@ export async function openAuthor(name, uid) {
   // 隐私开关（没跑 db/social.sql 时读不到 → 全开）
   const priv = await loadPrivacy(target);
   const favIds = priv.showFavs && target ? await loadUserFavs(target) : [];
-  const gallery = priv.showGallery ? collectImages(posts) : [];
+  const gallery = priv.showGallery ? await galleryFor(target, posts) : [];
   const likeInfo = target ? await loadProfileLikes(target) : { count: 0, mine: false };
   const myBlocks = await loadBlocks();
   let blockedByMe = !!target && myBlocks.includes(target);
@@ -794,7 +794,7 @@ export async function openAuthor(name, uid) {
     <nav class="author-tabs" id="authorTabs">
       <button class="author-tab on" data-atab="posts">帖子 <i>${posts.length}</i></button>
       ${priv.showFavs ? `<button class="author-tab" data-atab="favs">收藏夹 <i>${favIds.length}</i></button>` : ''}
-      ${priv.showGallery && gallery.length ? `<button class="author-tab" data-atab="gallery">图片 <i>${gallery.length}</i></button>` : ''}
+      ${priv.showGallery ? `<button class="author-tab" data-atab="gallery">图片 <i>${gallery.length}</i></button>` : ''}
       ${priv.allowWall ? `<button class="author-tab" data-atab="wall">留言板 <i>${wall.length}</i></button>` : ''}
     </nav>
     <div id="authorPane"></div>
@@ -894,7 +894,9 @@ export async function openAuthor(name, uid) {
       return;
     }
     if (tab === 'gallery') {
-      pane.innerHTML = `<div class="author-gallery">${gallery.map((src) => mediaHtml(src, 'author-shot')).join('')}</div>`;
+      pane.innerHTML = gallery.length
+        ? `<div class="author-gallery">${gallery.map((g) => mediaHtml(g.url, 'author-shot')).join('')}</div>`
+        : '<div class="me-empty"><span class="big">🖼</span>还没有发过带图片的帖子<br><span>发帖时加图片，这里就会自动汇总</span></div>';
       return;
     }
     if (tab === 'wall') return paintWall(wall);
@@ -1052,6 +1054,43 @@ async function loadUserFavs(email) {
   } catch {
     return [];
   }
+}
+
+/* ---------- 主页相册（自己上传的图） ---------- */
+async function loadPhotos(email) {
+  if (!email) return [];
+  try {
+    const rows = await rest('/rest/v1/profile_photos?select=id,url,created_at&user_email=eq.' + encodeURIComponent(email) + '&order=created_at.desc&limit=40');
+    return (rows || []).map((r) => ({ id: r.id, url: r.url }));
+  } catch {
+    return [];
+  }
+}
+
+async function addPhoto(email, url) {
+  await rest('/rest/v1/profile_photos', {
+    method: 'POST',
+    headers: { Prefer: 'return=minimal' },
+    body: [{ user_email: email, url }],
+  });
+}
+
+async function delPhoto(id) {
+  await rest('/rest/v1/profile_photos?id=eq.' + Number(id), { method: 'DELETE' });
+}
+
+/** 相册 = 自己上传的图 + 帖子里出现过的图（去重） */
+async function galleryFor(email, posts) {
+  const photos = await loadPhotos(email);
+  const seen = new Set(photos.map((p) => p.url));
+  const out = photos.map((p) => ({ id: p.id, url: p.url, mine: true }));
+  for (const src of collectImages(posts)) {
+    if (out.length >= 40) break;
+    if (seen.has(src)) continue;
+    seen.add(src);
+    out.push({ id: null, url: src, mine: false });
+  }
+  return out;
 }
 
 function collectImages(posts) {
@@ -1231,6 +1270,7 @@ export async function renderMe(root) {
         '<button class="me-stat" data-mtab="fav"><b id="meFavN">' + favIdList().length + '</b><span>收藏</span></button>' +
         '<button class="me-stat" data-mtab="posts"><b id="mePostN">—</b><span>我的帖子</span></button>' +
         '<button class="me-stat" data-mtab="wall"><b id="meWallN">—</b><span>留言</span></button>' +
+        '<button class="me-stat" data-mtab="photo"><b id="mePhotoN">—</b><span>图片</span></button>' +
         '<div class="me-stat ghost"><b id="meLikeN">—</b><span>主页赞</span></div>' +
         '<div class="me-stat ghost"><b>' + (mail ? '#' + me0.id : '—') + '</b><span>UID</span></div>' +
       '</div>' +
@@ -1239,6 +1279,7 @@ export async function renderMe(root) {
       '<button class="me-tab" data-mtab="fav">收藏夹 <i id="meFavC">' + favIdList().length + '</i></button>' +
       '<button class="me-tab" data-mtab="posts">我的帖子 <i id="mePostC">' + (postRows ? postRows.length : 0) + '</i></button>' +
       '<button class="me-tab" data-mtab="wall">留言 <i id="meWallC">0</i></button>' +
+      '<button class="me-tab" data-mtab="photo">图片 <i id="mePhotoC">0</i></button>' +
       '<button class="me-tab" data-mtab="priv">隐私设置</button>' +
       '<span class="me-tab-hint">以后的新功能也会长在这里</span>' +
     '</nav>' +
@@ -1455,18 +1496,89 @@ export async function renderMe(root) {
     });
   };
 
+  const paintPhotos = async () => {
+    if (!alive) return;
+    const em = currentEmail();
+    if (!em) {
+      pane.innerHTML = '<div class="me-empty"><span class="big">🖼</span>登录后才能上传展示图片<br><br>' +
+        '<button class="btn btn-primary btn-sm" id="meLogin5">去登录</button></div>';
+      const b = pane.querySelector('#meLogin5');
+      if (b) b.onclick = () => openLogin();
+      return;
+    }
+    pane.innerHTML = '<div class="empty-state"><span class="spin"></span>读取相册…</div>';
+    const rows = await loadPhotos(em);
+    if (!alive) return;
+    const setN = (id, v) => {
+      const el = root.querySelector('#' + id);
+      if (el) el.textContent = String(v);
+    };
+    setN('mePhotoC', rows.length);
+    setN('mePhotoN', rows.length);
+
+    pane.innerHTML = '<div class="photo-bar">' +
+        '<button class="btn btn-primary btn-sm" id="photoAdd">＋ 上传图片</button>' +
+        '<input type="file" id="photoFile" accept="image/*" multiple class="hidden">' +
+        '<span class="photo-hint">最多 40 张 · 别人在你主页「图片」里就能看到</span>' +
+      '</div>' +
+      (rows.length
+        ? '<div class="author-gallery">' + rows.map((r) => '<div class="photo-cell">' +
+            mediaHtml(r.url, 'author-shot') + '<button class="photo-del" data-pdel="' + r.id + '" title="删除">×</button></div>').join('') + '</div>'
+        : '<div class="me-empty"><span class="big">🖼</span>还没有上传任何图片<br><span>点上面的「＋ 上传图片」，挑几张想展示的</span></div>');
+
+    const addBtn = pane.querySelector('#photoAdd');
+    const fileIn = pane.querySelector('#photoFile');
+    if (addBtn && fileIn) {
+      addBtn.onclick = () => fileIn.click();
+      fileIn.onchange = async (ev) => {
+        const files = [...(ev.target.files || [])].slice(0, Math.max(0, 40 - rows.length));
+        if (!files.length) return;
+        addBtn.disabled = true;
+        addBtn.textContent = '上传中…';
+        let ok = 0;
+        for (const f of files) {
+          try {
+            const url = await fileToMedia(f);
+            await addPhoto(em, url);
+            ok += 1;
+          } catch (e) {
+            toast('有一张没传上：' + (e.message || ''));
+          }
+        }
+        ev.target.value = '';
+        addBtn.disabled = false;
+        addBtn.textContent = '＋ 上传图片';
+        if (ok) toast('已上传 ' + ok + ' 张');
+        paintPhotos();
+      };
+    }
+    pane.querySelectorAll('[data-pdel]').forEach((b) => {
+      b.onclick = async (ev) => {
+        ev.stopPropagation();
+        if (!confirm('删除这张图？')) return;
+        try {
+          await delPhoto(b.dataset.pdel);
+          paintPhotos();
+        } catch (e) {
+          toast('删除失败：' + e.message);
+        }
+      };
+    });
+  };
+
   const paint = async (force) => {
     setTabBtns();
     localStorage.setItem(ME_TAB_KEY, tab);
     if (tab === 'priv') await paintPrivacy();
     else if (tab === 'fav') await paintFavs(force);
     else if (tab === 'wall') await paintMyWall();
+    else if (tab === 'photo') await paintPhotos();
     else await paintPosts(force);
   };
 
   root.querySelectorAll('[data-mtab]').forEach((b) => {
     b.onclick = () => {
-      tab = ['posts', 'priv', 'wall'].includes(b.dataset.mtab) ? b.dataset.mtab : 'fav';
+      tab = ['posts', 'priv', 'wall', 'photo'].includes(b.dataset.mtab) ? b.dataset.mtab : 'fav';
       paint();
     };
   });
