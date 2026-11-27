@@ -560,31 +560,35 @@ export async function renderCommunity(root) {
 const REACT = [
   { k: 'like', e: '👍', t: '赞' },
   { k: 'dislike', e: '👎', t: '踩' },
-  { k: 'laugh', e: '😂', t: '大笑' },
+  { k: 'laugh', e: '😂', t: '笑死' },
+  { k: 'shock', e: '🤯', t: '震惊' },
   { k: 'cry', e: '😭', t: '感动' },
+  { k: 'curious', e: '🤔', t: '想玩' },
+  { k: 'mystic', e: '🔮', t: '神秘' },
+  { k: 'weird', e: '🃏', t: '搞怪' },
   { k: 'angry', e: '😡', t: '生气' },
   { k: 'speechless', e: '😑', t: '无语' },
+  { k: 'drool', e: '🤤', t: '馋了' },
+  { k: 'skull', e: '💀', t: '劝退' },
+  { k: 'sleep', e: '🥱', t: '无聊' },
+  { k: 'love', e: '😍', t: '真爱' },
 ];
 
 function reactionHtml(postId, counts, mine, big) {
-  const size = big ? 'react-lg' : '';
-  const main = REACT.slice(0, 2).map((r) => {
+  const cls = big ? 'react-lg' : '';
+  const btn = (r) => {
     const n = counts[r.k] || 0;
     const on = mine.has(r.k) ? 'on' : '';
-    return '<button class="react ' + size + ' ' + on + '" data-react="' + r.k + '" title="' + r.t + '">' +
+    return '<button class="react ' + cls + ' ' + on + '" data-react="' + r.k + '" title="' + r.t + '">' +
       '<span class="emo">' + r.e + '</span>' + (n ? '<b>' + n + '</b>' : '') + '</button>';
-  }).join('');
-
-  const extra = REACT.slice(2).map((r) => {
-    const n = counts[r.k] || 0;
-    const on = mine.has(r.k) ? 'on' : '';
-    return '<button class="react ' + size + ' ' + on + '" data-react="' + r.k + '" title="' + r.t + '">' +
-      '<span class="emo">' + r.e + '</span>' + (n ? '<b>' + n + '</b>' : '') + '</button>';
-  }).join('');
-
-  return '<div class="react-wrap" data-pid="' + postId + '">' + main +
-    '<button class="react more" data-more="1" title="更多心情">＋</button>' +
-    '<div class="react-pop hidden">' + extra + '</div>' +
+  };
+  const main = REACT.slice(0, 2).map(btn).join('');
+  const rest = REACT.slice(2).map(btn).join('');
+  return '<div class="react-row" data-pid="' + postId + '">' +
+    '<div class="react-main">' + main +
+    '<button class="react-plus ' + cls + '" data-more="1" title="更多心情">＋</button>' +
+    '</div>' +
+    '<div class="react-pop hidden"><div class="react-grid">' + rest + '</div></div>' +
     '</div>';
 }
 
@@ -593,7 +597,7 @@ function bindReactions(scope, root) {
     btn.onclick = async (ev) => {
       ev.stopPropagation();
       if (!currentEmail()) return openLogin();
-      const wrap = btn.closest('.react-wrap');
+      const wrap = btn.closest('.react-row');
       const postId = Number(wrap.dataset.pid);
       const kind = btn.dataset.react;
       const wasOn = btn.classList.contains('on');
@@ -624,10 +628,21 @@ function bindReactions(scope, root) {
   scope.querySelectorAll('[data-more]').forEach((btn) => {
     btn.onclick = (ev) => {
       ev.stopPropagation();
-      const pop = btn.parentElement.querySelector('.react-pop');
-      if (pop) pop.classList.toggle('hidden');
+      const row = btn.closest('.react-row');
+      const pop = row.querySelector('.react-pop');
+      const isHidden = pop.classList.contains('hidden');
+      scope.querySelectorAll('.react-pop').forEach((p) => p.classList.add('hidden'));
+      if (isHidden) pop.classList.remove('hidden');
     };
   });
+  if (!scope.__reactOutsideBound) {
+    scope.__reactOutsideBound = true;
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.react-row')) {
+        scope.querySelectorAll('.react-pop').forEach((p) => p.classList.add('hidden'));
+      }
+    });
+  }
 }
 
 function popEmoji(anchor, emoji) {

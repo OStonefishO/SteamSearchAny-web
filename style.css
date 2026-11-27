@@ -863,36 +863,63 @@ textarea.input { resize: vertical; min-height: 96px; }
 
 
 /* 互动条 */
-.react-wrap { display: inline-flex; align-items: center; gap: 6px; position: relative; }
+.react-row { display: block; margin: 10px 0 4px; position: relative; }
+.react-main {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 5px; border-radius: 14px;
+  background: #0b131b; border: 1px solid var(--line);
+}
 .react {
-  display: inline-flex; align-items: center; gap: 4px;
-  height: 30px; padding: 0 10px; border-radius: 999px;
-  background: #0d1822; border: 1px solid var(--line-2);
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-width: 52px; height: 40px; padding: 0 12px; border-radius: 11px;
+  background: #0f1c27; border: 1px solid var(--line-2);
   color: var(--text-3); font-size: 13px; cursor: pointer;
   transition: transform .12s, border-color .12s, background .12s;
 }
-.react .emo { font-size: 15px; line-height: 1; }
-.react b { font-weight: 700; font-size: 12px; }
-.react:hover { border-color: var(--accent); background: #10202c; }
-.react.on { border-color: var(--accent); background: rgba(69,189,247,.14); color: #cfeaff; }
-.react.more { font-size: 15px; padding: 0 9px; color: var(--text-3); }
-.react.pop { transform: scale(1.28); }
-.react-lg { height: 36px; padding: 0 14px; font-size: 14px; }
-.react-lg .emo { font-size: 18px; }
+.react .emo { font-size: 22px; line-height: 1; }
+.react b { font-weight: 800; font-size: 13px; letter-spacing: .01em; }
+.react:hover { border-color: var(--accent); background: #12222e; }
+.react.on { border-color: var(--accent); background: rgba(69,189,247,.16); color: #d6eeff; }
+.react.on b { color: #eaf7ff; }
+.react.pop { transform: scale(1.22); }
+
+.react-plus {
+  width: 40px; height: 40px; display: grid; place-items: center;
+  border-radius: 11px; background: #0a141d;
+  border: 1px dashed var(--line-2); color: var(--text-3);
+  font-size: 19px; cursor: pointer; margin-left: 2px;
+  transition: border-color .12s, color .12s, background .12s;
+}
+.react-plus:hover { border-color: var(--accent); color: var(--accent); background: #10202c; }
+.react-plus.react-lg { width: 46px; height: 46px; font-size: 21px; }
+
+.react-lg { height: 46px; min-width: 60px; padding: 0 15px; }
+.react-lg .emo { font-size: 26px; }
+.react-lg b { font-size: 14px; }
+
 .react-pop {
-  position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 20;
-  display: flex; gap: 6px; padding: 8px; border-radius: 12px;
+  position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 30;
+  padding: 10px; border-radius: 16px;
   background: #0c141d; border: 1px solid var(--line-2);
-  box-shadow: 0 16px 40px -20px #000;
+  box-shadow: 0 24px 50px -24px #000;
 }
 .react-pop.hidden { display: none; }
+.react-grid { display: grid; grid-template-columns: repeat(6, 44px); gap: 8px; }
+.react-grid .react {
+  width: 44px; min-width: 44px; height: 44px; padding: 0;
+  flex-direction: column; gap: 1px; border-radius: 12px;
+}
+.react-grid .react .emo { font-size: 20px; }
+.react-grid .react b { font-size: 10px; font-weight: 700; color: var(--text-4); }
+.react-grid .react.on b { color: #cfeaff; }
+
 .float-emoji {
   position: fixed; transform: translate(-50%, 0); pointer-events: none;
-  font-size: 22px; z-index: 9999;
+  font-size: 26px; z-index: 9999;
   animation: floatUp .9s ease-out forwards;
 }
 @keyframes floatUp {
   0% { opacity: 1; transform: translate(-50%, 0) scale(.8); }
-  60% { opacity: 1; transform: translate(-50%, -34px) scale(1.15); }
-  100% { opacity: 0; transform: translate(-50%, -64px) scale(1); }
+  60% { opacity: 1; transform: translate(-50%, -42px) scale(1.2); }
+  100% { opacity: 0; transform: translate(-50%, -78px) scale(1); }
 }
