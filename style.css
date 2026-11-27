@@ -1796,3 +1796,56 @@ textarea.input { resize: vertical; min-height: 96px; }
   .author-stat { flex: 1 1 40%; }
   .author-gallery { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
 }
+
+
+/* ==========================================================================
+   社区帖子卡片：头 / 标题 / 正文 / 图片 / 评论预览 / 互动条 分层
+   （原来 h4.cmt-preview 完全没样式，全挤成一坨）
+   ========================================================================== */
+.post { padding: 15px 16px 12px; }
+.post header {
+  padding-bottom: 9px; margin-bottom: 11px;
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+}
+
+.post-title {
+  margin: 0 0 6px;
+  font-size: 15.5px; line-height: 1.45; font-weight: 700;
+  color: #f2f8ff; letter-spacing: -0.01em;
+}
+.post-body {
+  margin: 0 0 10px;
+  font-size: 13px; line-height: 1.75;
+  color: var(--text-3);
+}
+.post .imgs { margin: 10px 0 4px; }
+
+/* 评论预览：单独一块底色 + 边框，跟正文分开 */
+.cmt-preview {
+  display: grid; gap: 5px;
+  margin: 10px 0 2px; padding: 9px 11px;
+  background: #0a1119;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.cmt-line { font-size: 12.5px; line-height: 1.55; color: var(--text-3); word-break: break-word; }
+.cmt-line b { color: var(--text-2); font-weight: 600; margin-right: 4px; }
+.cmt-more { font-size: 11.5px; color: var(--text-4); }
+
+/* 互动条：跟上面隔一条线 */
+.post-foot {
+  margin-top: 11px; padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+/* 详情页里评论那块也拉开一点 */
+.post-comments { margin-top: 12px; }
+
+@media (max-width: 620px) {
+  .post { padding: 13px 12px 10px; }
+  .post-title { font-size: 15px; }
+  .post-body { font-size: 12.8px; line-height: 1.72; }
+  .post header { gap: 8px; padding-bottom: 8px; margin-bottom: 9px; }
+  .cmt-preview { padding: 8px 9px; }
+}
