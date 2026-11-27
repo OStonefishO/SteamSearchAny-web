@@ -1010,70 +1010,52 @@ textarea.input { resize: vertical; min-height: 96px; }
 }
 
 
-/* 好友面板（三板块固定高度） */
-.fr-wrap { display: flex; flex-direction: column; gap: 12px; }
-.fr-title { margin: 0 0 2px; }
+/* 好友面板（三 tab + 固定方形） */
+.fr-wrap {
+  width: min(560px, 92vw);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.fr-title { margin: 0; }
 
-.fr-card {
+.fr-tabs {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+  padding: 5px; background: #0a1219; border: 1px solid var(--line); border-radius: 12px;
+}
+.fr-tab {
+  height: 34px; border: 0; border-radius: 9px; cursor: pointer;
+  background: transparent; color: var(--text-3); font-size: 12.5px; font-weight: 600;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+}
+.fr-tab i {
+  font-style: normal; font-size: 10.5px; font-weight: 700;
+  background: #16303f; color: #9fd6f5; border-radius: 999px; padding: 0 6px; line-height: 15px;
+}
+.fr-tab.on { background: rgba(69,189,247,.16); color: #cfeaff; box-shadow: inset 0 0 0 1px rgba(69,189,247,.4); }
+.fr-tab.on i { background: rgba(69,189,247,.28); color: #eaf7ff; }
+
+/* 固定方形内容区，切换 tab 不变形 */
+.fr-panel {
+  height: 400px; overflow-y: auto; overflow-x: hidden;
   background: #0a1219; border: 1px solid var(--line); border-radius: 14px;
-  padding: 0; overflow: hidden;
+  padding: 10px;
 }
-.fr-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 11px 14px; background: #0d1720; border-bottom: 1px solid var(--line);
-  font-size: 12.5px; font-weight: 700; color: var(--text-2);
-}
-.fr-count {
-  font-size: 11.5px; font-weight: 700; color: var(--accent);
-  background: rgba(69,189,247,.12); border: 1px solid rgba(69,189,247,.3);
-  border-radius: 999px; padding: 1px 9px;
-}
-.fr-hint { font-size: 11px; font-weight: 400; color: var(--text-4); }
+.fr-group { font-size: 11px; color: var(--text-4); padding: 8px 8px 4px; letter-spacing: .04em; }
 
-/* 固定高度 + 内部滚动，不随内容伸缩 */
-.fr-scroll { height: 168px; overflow-y: auto; overflow-x: hidden; padding: 8px; }
-
-.fr-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px; border-radius: 10px;
-}
+.fr-item { display: flex; align-items: center; gap: 10px; padding: 9px 8px; border-radius: 10px; }
 .fr-item:hover { background: #101c26; }
 .fr-info { flex: 1; min-width: 0; }
 .fr-name { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
 .fr-sub { font-size: 11.5px; color: var(--text-4); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fr-acts { display: flex; gap: 6px; flex: none; }
 .fr-acts .btn { height: 28px; padding: 0 10px; font-size: 11.5px; border-radius: 8px; }
-.fr-empty { padding: 34px 10px; text-align: center; color: var(--text-4); font-size: 12.5px; }
+.fr-empty { padding: 90px 12px; text-align: center; color: var(--text-4); font-size: 12.5px; line-height: 1.9; }
 
-.fr-add { display: flex; gap: 8px; padding: 12px 14px; }
-.fr-add .input { flex: 1; letter-spacing: .04em; }
-.fr-msg { margin: 0; padding: 0 14px 12px; font-size: 12px; color: var(--text-4); }
+.fr-addbox { padding: 18px 12px; }
+.fr-tip { font-size: 12.5px; color: var(--text-4); margin: 0 0 14px; }
+.fr-msg { margin: 10px 0 0; font-size: 12px; color: var(--text-4); min-height: 18px; }
 .fr-msg.ok { color: #b6e04a; font-weight: 700; }
 .fr-msg.err { color: #ff6b6b; font-weight: 700; }
 
 @media (max-width: 600px) {
-  .fr-scroll { height: 150px; }
-  .fr-acts .btn { padding: 0 8px; }
-}
-
-
-/* 好友行未读红点 */
-[data-chat] { position: relative; }
-.chat-unread {
-  position: absolute; top: -5px; right: -5px;
-  min-width: 15px; height: 15px; line-height: 15px; padding: 0 4px;
-  border-radius: 8px; background: #f4736f; color: #fff;
-  font-size: 9.5px; font-weight: 700; text-align: center;
-  box-shadow: 0 0 0 2px #0a1219;
-}
-
-/* 通知面板改为下拉式 */
-.notif-panel {
-  position: fixed; z-index: 9500;
-  max-height: 62vh; display: flex; flex-direction: column;
-  background: #0b141d; border: 1px solid var(--line-2); border-radius: 14px;
-  box-shadow: 0 30px 70px -30px #000; overflow: hidden;
-}
-@media (max-width: 600px) {
-  .notif-panel { left: 8px !important; width: calc(100vw - 16px) !important; }
+  .fr-panel { height: 62vh; }
 }
