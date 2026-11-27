@@ -2,7 +2,9 @@
 import { isConfigured, sendCode, verifyCode, logout, currentEmail, session, captureHashSession, fillEmailFromUser } from './supabase-lite.js';
 
 try {
+  const rawUrl = location.href;
   const claimed = captureHashSession();
+  if (claimed) window.__LH_LOGIN_URL = rawUrl;
   Promise.resolve(claimed ? fillEmailFromUser() : null).then(() => syncProfile()).then(() => refreshAuthButton()).catch(() => {});
 } catch {}
 
@@ -475,7 +477,11 @@ export async function renderCommunity(root) {
 
 async function renderList(root) {
   const size = pageSize();
-  root.innerHTML = `<div class="cmt-bar">
+  const loginHint = window.__LH_LOGIN_URL
+    ? '<div class="login-sync"><span>✓ 已登录。想在电脑上也登录？</span><button class="btn btn-sm" id="copyLoginUrl">复制登录链接</button><b data-hide-hint="1">×</b></div>'
+    : '';
+
+  root.innerHTML = loginHint + `<div class="cmt-bar">
       <button class="btn btn-primary" id="newPost">＋ 发帖</button>
       <button class="btn" id="myProfile">我的资料</button>
       <span class="cmt-hint">点帖子进入详情，可看图与评论</span>
@@ -486,6 +492,20 @@ async function renderList(root) {
       </span>
     </div><div id="postList"><div class="empty-state"><span class="spin"></span></div></div>
     <div class="pager"><button class="btn btn-sm" id="prevPage">上一页</button><span id="pageInfo"></span><button class="btn btn-sm" id="nextPage">下一页</button></div>`;
+
+  const cp = root.querySelector('#copyLoginUrl');
+  if (cp) {
+    cp.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(window.__LH_LOGIN_URL);
+        cp.textContent = '已复制';
+      } catch {
+        prompt('手动复制这个链接到电脑打开：', window.__LH_LOGIN_URL);
+      }
+    };
+  }
+  const hideHint = root.querySelector('[data-hide-hint]');
+  if (hideHint) hideHint.onclick = () => { const el = hideHint.parentElement; if (el) el.remove(); };
 
   root.querySelector('#newPost').onclick = () => (currentEmail() ? openComposer(null) : openLogin());
   root.querySelector('#myProfile').onclick = () => openLogin();
