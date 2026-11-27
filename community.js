@@ -19,6 +19,16 @@ export function profile() {
   try { p = JSON.parse(localStorage.getItem(PK) || '{}'); } catch {}
   const email = currentEmail() || '';
   let id = p.id;
+  // 支持用 ?uid=xxxx 认领一个固定 ID
+  try {
+    const q = new URLSearchParams(location.search).get('uid');
+    if (!id && q && /^[0-9]{10}$/.test(q)) {
+      id = Number(q);
+      p.id = id;
+      localStorage.setItem(PK, JSON.stringify(p));
+      history.replaceState(null, '', location.pathname);
+    }
+  } catch {}
   if (!id) {
     id = 1000000000 + Math.floor(Math.random() * 9000000000);
     try { p.id = id; localStorage.setItem(PK, JSON.stringify(p)); } catch {}
