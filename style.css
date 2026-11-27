@@ -1083,8 +1083,9 @@ textarea.input { resize: vertical; min-height: 96px; }
 
 /* 状态栏 */
 .chat-head {
+  position: sticky; top: 0; z-index: 5;
   display: flex; align-items: center; gap: 10px; flex: none;
-  padding: 14px 18px; background: #0c151e;
+  padding: 11px 16px; background: #0c151e;
   border-bottom: 1px solid var(--line-2);
 }
 .chat-back {
@@ -1094,7 +1095,7 @@ textarea.input { resize: vertical; min-height: 96px; }
 }
 .chat-back:hover { border-color: var(--accent); color: var(--accent); }
 .chat-id { display: flex; flex-direction: column; gap: 2px; line-height: 1.25; }
-.chat-id b { font-size: 14.5px; font-weight: 700; }
+.chat-id b { font-size: 12.5px; font-weight: 600; letter-spacing: .01em; }
 .chat-state { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--text-4); }
 .chat-state .dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; }
 .chat-state .dot.off { background: #54687a; }
