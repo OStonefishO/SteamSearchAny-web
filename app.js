@@ -1212,7 +1212,12 @@ async function renderEvents() {
 
 // ---------------- 即将上线 ----------------
 let comingData = null;
+let comingIndex = new Map();
 let comingCat = 'soon';
+let comingGenre = '';
+let comingDate = 'all';
+let comingSort = 'soon';
+let comingShown = 96;
 
 async function loadComing(force) {
   if (comingData && !force) return comingData;
@@ -1220,27 +1225,71 @@ async function loadComing(force) {
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   comingData = await res.json();
+  comingIndex = new Map((comingData.items || []).map((g) => [Number(g.id), g]));
   return comingData;
 }
 
-function comingCardHtml(g) {
-  const dateTxt = g.release || (g.soon ? '即将推出' : '待定');
-  const sub = [g.price && g.price !== '¥0.00' ? g.price : null, g.demo ? '有 Demo' : null].filter(Boolean).join(' · ') || '还没定价';
-  return `<a class="coming-card" href="${STORE(g.id)}" target="_blank" rel="noreferrer" aria-label="${esc(g.name)}">
+function comingGenresHtml(data) {
+  const list = Array.isArray(data && data.genres) ? data.genres : [];
+  if (!list.length) return '';
+  return '<button class="genre-chip' + (comingGenre ? '' : ' on') + '" data-genre="">全部类型</button>' +
+    list.map((g) => '<button class="genre-chip' + (comingGenre === g.name ? ' on' : '') + '" data-genre="' + esc(g.name) + '">' +
+      esc(g.name) + '<i>' + g.n + '</i></button>').join('');
+}
+
+function comingCardHtml(g, i) {
+  const dateTxt = g.release || (g.soon ? '即将推出' : '已发售');
+  const priceTxt = g.price && g.price !== '¥0.00' ? g.price : '还没定价';
+  const sub = [priceTxt, (g.genres || []).slice(0, 2).join(' / ')].filter(Boolean).join(' · ');
+  return `<article class="coming-card" data-cid="${g.id}" tabindex="0" aria-label="${esc(g.name)}" style="animation-delay:${Math.min(i * 12, 320)}ms">
     <div class="coming-media">
       <img src="${esc(g.header || CDN(g.id, 'header'))}" alt="${esc(g.name)}" loading="lazy" decoding="async" onerror="this.onerror=null;this.style.opacity=.12">
+      <span class="card-pill left">${esc(dateTxt)}</span>
+      ${g.demo ? '<span class="coming-demo">Demo</span>' : ''}
+      <button class="card-info" data-cinfo="${g.id}" title="游戏资料" aria-label="游戏资料">i</button>
       ${favBtnHtml(g.id)}
-      <span class="coming-date">${esc(dateTxt)}</span>
     </div>
     <div class="coming-name">${esc(g.name)}</div>
-    <div class="coming-sub">${esc(sub)}</div>
-  </a>`;
+    ${sub ? `<div class="coming-sub">${esc(sub)}</div>` : ''}
+  </article>`;
+}
+
+function comingFilter(all) {
+  const now = new Date();
+  const ym = now.toISOString().slice(0, 7);
+  const shift = (n) => {
+    const d = new Date(now.getFullYear(), now.getMonth() + n, 1);
+    return d.toISOString().slice(0, 7);
+  };
+  const end = shift(comingDate === 'quarter' ? 3 : 0);
+  return all.filter((g) => {
+    if (comingCat === 'demo' ? !g.demo : g.soon === false) return false;
+    if (comingGenre && !(g.genres || []).includes(comingGenre)) return false;
+    if (comingDate !== 'all') {
+      const k = String(g.key || '');
+      if (comingDate === 'tbd') return !k;
+      if (!k) return false;
+      if (comingDate === 'month') return k.slice(0, 7) === ym;
+      if (comingDate === 'quarter') return k >= ym && k <= end;
+      if (comingDate === 'year') return k.slice(0, 4) === String(now.getFullYear());
+    }
+    return true;
+  }).sort((a, b) => {
+    if (comingSort === 'name') return String(a.name).localeCompare(String(b.name), 'zh');
+    if (comingSort === 'demo') {
+      if (!!b.demo !== !!a.demo) return b.demo ? 1 : -1;
+    }
+    const ka = a.key || '9999-99';
+    const kb = b.key || '9999-99';
+    return ka === kb ? String(a.name).localeCompare(String(b.name), 'zh') : ka < kb ? -1 : 1;
+  });
 }
 
 async function renderComing(force) {
   const grid = $('#comingGrid');
   if (!grid) return;
   const countEl = $('#comingCount');
+  const genreBox = $('#comingGenres');
   if (!comingData || force) grid.innerHTML = '<div class="empty-state"><span class="big">🛰️</span>正在读取即将上线的名单…</div>';
   let data;
   try {
@@ -1249,19 +1298,76 @@ async function renderComing(force) {
     grid.innerHTML = '<div class="empty-state"><span class="big">📡</span>还没抓到「即将上线」的数据<br>' +
       '<span style="font-size:12px;color:var(--text-4)">GitHub Action 定时抓取，等下一轮；本地开发时这里为空是正常的</span></div>';
     if (countEl) countEl.textContent = '';
+    if (genreBox) genreBox.innerHTML = '';
     return;
   }
   const all = Array.isArray(data.items) ? data.items : [];
-  const list = comingCat === 'demo' ? all.filter((g) => g.demo) : all.filter((g) => g.soon !== false);
-  if (countEl) countEl.textContent = `${list.length} 款 · 数据 ${data.built ? String(data.built).slice(0, 10) : '未知'}`;
+  if (genreBox) genreBox.innerHTML = comingGenresHtml(data);
+  const list = comingFilter(all);
+  if (countEl) {
+    countEl.textContent = `${list.length} / ${all.length} 款 · 数据 ${data.built ? String(data.built).slice(0, 10) : '未知'}`;
+  }
   if (!list.length) {
-    grid.innerHTML = comingCat === 'demo'
-      ? '<div class="empty-state">这批名单里还没有带 Demo 的，下一轮抓取会补上</div>'
-      : '<div class="empty-state">名单是空的，等下一轮抓取</div>';
+    grid.innerHTML = '<div class="empty-state">这个筛选下没有结果，换个类型或日期试试</div>';
     return;
   }
-  grid.innerHTML = list.map(comingCardHtml).join('');
+  grid.innerHTML = list.slice(0, comingShown).map((g, i) => comingCardHtml(g, i)).join('');
+  const more = document.getElementById('comingMore');
+  if (more) {
+    const rest = list.length - comingShown;
+    more.hidden = rest <= 0;
+    if (rest > 0) more.textContent = `显示更多（还有 ${rest} 款）`;
+  }
 }
+
+/** 即将上线的游戏还没进语料库，详情只能看这里（+ Steam 商店） */
+function openComingDetail(id) {
+  const g = comingIndex.get(Number(id));
+  if (!g) return;
+  openModalShell(`
+    <div class="m-hero">${imgTag(g.header || CDN(g.id, 'header'), g.name, g.id)}</div>
+    <div class="m-body">
+      <h3>${esc(g.name)}</h3>
+      <div class="hero-chips" style="margin-top:10px">
+        <span class="chip">${esc(g.release || '未定档')}</span>
+        <span class="chip">${esc(g.price && g.price !== '¥0.00' ? g.price : '还没定价')}</span>
+        ${g.demo ? '<span class="chip accent">有 Demo</span>' : ''}
+        ${g.soon ? '<span class="chip">即将发售</span>' : '<span class="chip">已发售</span>'}
+      </div>
+      ${(g.genres || []).length ? `<div class="hero-chips" style="margin-top:10px">${(g.genres || []).map((t) => `<span class="chip tag">${esc(t)}</span>`).join('')}</div>` : ''}
+      <div class="hero-actions" style="margin-top:22px">
+        <a class="btn btn-primary" href="${STORE(g.id)}" target="_blank" rel="noreferrer">在 Steam 打开 ↗</a>
+        <button class="btn" id="cmShare">分享给好友</button>
+        <button class="btn" id="cmShot">生成分享图</button>
+        <button class="btn${favHas(g.id) ? ' on' : ''}" id="cmFav">${favHas(g.id) ? '★ 已收藏' : '☆ 收藏'}</button>
+      </div>
+      <p style="margin-top:14px;font-size:12px;color:var(--text-4)">这款还没进站内语料，暂时只能先看 Steam 商店页。</p>
+    </div>`);
+  const content = $('#modalContent');
+  $('#cmShare', content)?.addEventListener('click', async () => {
+    try {
+      const m = await import('./community.js?v=' + Date.now());
+      m.shareGame({ id: g.id, name: g.name, header: g.header, year: (String(g.release || '').match(/\d{4}/) || [])[0] || null, rev: {}, gem: null });
+    } catch (e) {
+      toast('分享面板没加载出来：' + e.message);
+    }
+  });
+  $('#cmShot', content)?.addEventListener('click', async () => {
+    try {
+      const m = await import('./community.js?v=' + Date.now());
+      m.shareGameImage({ id: g.id, name: g.name, header: g.header, price: g.price, year: (String(g.release || '').match(/\d{4}/) || [])[0] || null, rev: {}, desc: [g.release ? '预计 ' + g.release : null, (g.genres || []).join(' / ')].filter(Boolean).join(' · ') });
+    } catch (e) {
+      toast('分享图没生成出来：' + e.message);
+    }
+  });
+  $('#cmFav', content)?.addEventListener('click', (ev) => {
+    const on = toggleFav(g.id, g.name);
+    const b = ev.currentTarget;
+    b.textContent = on ? '★ 已收藏' : '☆ 收藏';
+    b.classList.toggle('on', on);
+  });
+}
+
 
 function bindEvents() {
   $('#eventsBody')?.addEventListener('click', (ev) => {
@@ -1275,9 +1381,24 @@ function bindEvents() {
       $$('#comingCat .seg-btn').forEach((x) => x.classList.remove('active'));
       b.classList.add('active');
       comingCat = b.dataset.cat === 'demo' ? 'demo' : 'soon';
+      comingShown = 96;
       renderComing();
     })
   );
+  $('#comingDate')?.addEventListener('change', (ev) => { comingDate = ev.target.value; renderComing(); });
+  $('#comingSort')?.addEventListener('change', (ev) => { comingSort = ev.target.value; renderComing(); });
+  $('#comingGenres')?.addEventListener('click', (ev) => {
+    const chip = ev.target.closest('[data-genre]');
+    if (!chip) return;
+    comingGenre = chip.dataset.genre || '';
+    comingShown = 96;
+    renderComing();
+  });
+  $('#comingGrid')?.addEventListener('click', (ev) => {
+    const card = ev.target.closest('.card');
+    if (!card) return;
+    openComingDetail(card.dataset.cid);
+  });
   $('#comingReload')?.addEventListener('click', () => renderComing(true));
   $$('.subtab').forEach((b) => b.addEventListener('click', () => switchView(b.dataset.sub)));
 }

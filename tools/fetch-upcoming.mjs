@@ -121,6 +121,47 @@ async function fetchSearch({ filter, sortBy, pages, note }) {
   return rows;
 }
 
+/** 批量补类型标签 + 精确发售日（appdetails 一次最多几十个 appid） */
+async function enrichGenres(items) {
+  const ids = items.map((x) => x.id);
+  const chunks = [];
+  for (let i = 0; i < ids.length; i += 40) chunks.push(ids.slice(i, i + 40));
+  const info = new Map();
+  for (let i = 0; i < chunks.length; i += 1) {
+    const url =
+      'https://store.steampowered.com/api/appdetails?appids=' + chunks[i].join(',') + '&l=schinese&cc=CN';
+    try {
+      const data = await jget(url);
+      for (const [id, node] of Object.entries(data || {})) {
+        if (!node || !node.success || !node.data) continue;
+        const d = node.data;
+        const genres = (d.genres || []).map((g) => String(g.description || '').trim()).filter(Boolean);
+        const rd = d.release_date || {};
+        info.set(Number(id), {
+          genres: genres.slice(0, 3),
+          release: rd.coming_soon ? rd.date || null : rd.date || null,
+          free: !!d.is_free,
+        });
+      }
+      console.log(`  appdetails ${i + 1}/${chunks.length} 批：已补 ${info.size} 条`);
+    } catch (e) {
+      console.log(`  appdetails 第 ${i + 1} 批失败：${e.message}`);
+    }
+    await sleep(700);
+  }
+  for (const it of items) {
+    const extra = info.get(it.id);
+    if (!extra) continue;
+    if (extra.genres.length) it.genres = extra.genres;
+    if (extra.release && /^\d{4}/.test(extra.release)) {
+      it.release = extra.release;
+      it.key = releaseKey(extra.release) || it.key;
+    }
+    if (extra.free) it.price = '免费';
+  }
+  return items;
+}
+
 async function main() {
   const now = new Date();
   const soonRows = await fetchSearch({
@@ -187,6 +228,12 @@ async function main() {
     counts: { soon: items.filter((x) => x.soon).length, demo: items.filter((x) => x.demo).length },
     items,
   };
+
+  // 补类型标签（用于「即将上线」页的类型筛选）
+  await enrichGenres(out.items);
+  const genreCount = new Map();
+  for (const it of out.items) for (const g of it.genres || []) genreCount.set(g, (genreCount.get(g) || 0) + 1);
+  out.genres = [...genreCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 16).map(([name, n]) => ({ name, n }));
 
   await fs.mkdir(path.dirname(OUT), { recursive: true });
   await fs.writeFile(OUT, JSON.stringify(out), 'utf8');

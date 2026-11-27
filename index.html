@@ -39,7 +39,7 @@
 </script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗼</text></svg>">
 <link rel="preload" href="fonts/inter-500.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=2026-11-26-11777-6375364-3o1j">
+<link rel="stylesheet" href="style.css?v=2026-11-26-11777-6375364-3ti3">
   <meta property="og:title" content="Steam 灯塔 · 找到没人注意到的那些游戏">
   <meta property="og:description" content="随机盲盒发现冷门佳作 + 多游戏加权相似检索（静态版，离线可跑）">
 </head>
@@ -299,10 +299,23 @@
         <button class="seg-btn active" data-cat="soon">即将发售</button>
         <button class="seg-btn" data-cat="demo">带 Demo</button>
       </div>
+      <select class="input sm coming-select" id="comingDate" aria-label="发售日期">
+        <option value="all">全部日期</option>
+        <option value="month">本月发售</option>
+        <option value="quarter">3 个月内</option>
+        <option value="year">今年内</option>
+        <option value="tbd">未定档</option>
+      </select>
+      <select class="input sm coming-select" id="comingSort" aria-label="排序">
+        <option value="soon">按发售时间</option>
+        <option value="name">按名称</option>
+        <option value="demo">Demo 优先</option>
+      </select>
       <span class="coming-count" id="comingCount"></span>
     </div>
-
+    <div class="coming-genres" id="comingGenres"></div>
     <div class="coming-grid" id="comingGrid"></div>
+    <div class="coming-more"><button class="btn" id="comingMore" hidden>显示更多</button></div>
   </section>
 
   <!-- ================= 社区 ================= -->
@@ -363,8 +376,8 @@
 
 <script src="config.js"></script>
   <script>window.LIGHTHOUSE_STATIC = true;</script>
-<script src="local-api.js?v=2026-11-26-11777-6375364-3o1j"></script>
-<script src="app.js?v=2026-11-26-11777-6375364-3o1j" type="module"></script>
+<script src="local-api.js?v=2026-11-26-11777-6375364-3ti3"></script>
+<script src="app.js?v=2026-11-26-11777-6375364-3ti3" type="module"></script>
 
 <script id="LH_BOOT_AUTH">
 // 独立绑定登录按钮：即使主程序还没就绪也能打开登录框
