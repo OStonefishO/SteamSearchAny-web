@@ -1,7 +1,10 @@
 // 社区/账号 v2：头像上传+缩放、作者主页、删帖子
 import { isConfigured, sendCode, verifyCode, logout, currentEmail, session, captureHashSession, fillEmailFromUser } from './supabase-lite.js';
 
-try { if (captureHashSession()) fillEmailFromUser(); } catch {}
+try {
+  const claimed = captureHashSession();
+  Promise.resolve(claimed ? fillEmailFromUser() : null).then(() => syncProfile()).then(() => refreshAuthButton()).catch(() => {});
+} catch {}
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const timeAgo = (iso) => {
@@ -66,6 +69,48 @@ async function rest(path, opts = {}) {
   const data = txt ? JSON.parse(txt) : null;
   if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
   return data;
+}
+
+/* ---------- 远端资料（跨设备同一 UID） ---------- */
+async function apiGetProfile(email) {
+  const rows = await rest('/rest/v1/profiles?select=user_email,uid,name,avatar,color&user_email=eq.' + encodeURIComponent(email) + '&limit=1');
+  return rows && rows[0];
+}
+
+async function apiUpsertProfile(p) {
+  const email = currentEmail();
+  if (!email) return;
+  await rest('/rest/v1/profiles', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: [{ user_email: email, uid: p.id, name: p.name, avatar: p.img || p.avatar, color: p.color, updated_at: new Date().toISOString() }],
+  });
+}
+
+/** 登录后同步：远端有就用远端，没有就把本地（或新生成）写上去 */
+export async function syncProfile() {
+  const email = currentEmail();
+  if (!email || !isConfigured()) return profile();
+  try {
+    const remote = await apiGetProfile(email);
+    if (remote) {
+      const local = profile();
+      const merged = {
+        id: Number(remote.uid),
+        name: remote.name || local.name,
+        avatar: (remote.avatar || '').startsWith('data:') ? local.avatar : (remote.avatar || local.avatar),
+        img: (remote.avatar || '').startsWith('data:') ? remote.avatar : (local.img || ''),
+        color: remote.color || local.color,
+      };
+      saveProfile(merged);
+      return merged;
+    }
+    const local = profile();
+    await apiUpsertProfile(local);
+    return local;
+  } catch {
+    return profile();
+  }
 }
 
 /* ---------- 头像上传（居中裁剪 + 缩放） ---------- */
@@ -160,6 +205,10 @@ export function openLogin() {
 
   DRAFT = DRAFT || { ...profile() };
   const p = DRAFT;
+  if (!window.__profileSynced) {
+    window.__profileSynced = true;
+    syncProfile().then(() => { DRAFT = null; refreshAuthButton(); }).catch(() => {});
+  }
   box.innerHTML = `<div class="m-body">
     <h3>我的账号</h3>
     <div class="profile-head">
@@ -222,6 +271,7 @@ export function openLogin() {
   box.querySelector('#pSave').onclick = () => {
     draft.name = (box.querySelector('#pName').value || '').trim().slice(0, 16) || email.split('@')[0];
     saveProfile(draft);
+    apiUpsertProfile(draft).catch(() => {});
     DRAFT = null;
     m.hidden = true;
     refreshAuthButton();
