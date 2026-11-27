@@ -139,3 +139,39 @@ export async function fillEmailFromUser() {
   } catch {}
   return session();
 }
+
+
+/** 给当前已登录用户设置密码 */
+export async function setPassword(pw) {
+  const s = session();
+  if (!s || !s.access_token) throw new Error('请先登录');
+  const cfg = CFG();
+  const res = await fetch(cfg.url + '/auth/v1/user', {
+    method: 'PUT',
+    headers: { apikey: cfg.anonKey, Authorization: 'Bearer ' + s.access_token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pw }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || data.msg || '设置失败');
+  return true;
+}
+
+/** 邮箱 + 密码登录 */
+export async function signInWithPassword(email, password) {
+  const cfg = CFG();
+  const res = await fetch(cfg.url + '/auth/v1/token?grant_type=password', {
+    method: 'POST',
+    headers: { apikey: cfg.anonKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(d.error_description || d.msg || d.message || '登录失败');
+  saveSession({
+    access_token: d.access_token,
+    refresh_token: d.refresh_token,
+    expires_at: Date.now() + (d.expires_in || 3600) * 1000,
+    email: (d.user && d.user.email) || email,
+    uid: d.user && d.user.id,
+  });
+  return true;
+}

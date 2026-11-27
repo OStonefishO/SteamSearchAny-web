@@ -1,5 +1,5 @@
 // 社区 v3：图片(≤9)、帖子详情页、分页(可配置)、点赞、删评论
-import { isConfigured, sendCode, verifyCode, logout, currentEmail, session, captureHashSession, fillEmailFromUser } from './supabase-lite.js';
+import { isConfigured, sendCode, verifyCode, logout, currentEmail, session, captureHashSession, fillEmailFromUser, setPassword, signInWithPassword } from './supabase-lite.js';
 
 try {
   const rawUrl = location.href;
@@ -227,7 +227,12 @@ export function openLogin() {
     return;
   }
   if (!email) {
-    box.innerHTML = `<div class="m-body"><h3>邮箱登录</h3>
+    box.innerHTML = `<div class="m-body"><h3>登录</h3>
+      <div class="segs" style="display:flex;gap:8px;margin:6px 0 14px">
+        <button class="btn btn-sm" id="tabMail" style="flex:1">邮件链接</button>
+        <button class="btn btn-sm" id="tabPw" style="flex:1">账号密码</button>
+      </div>
+      <div id="mailPane">
       <p style="color:var(--text-3);font-size:13px;margin:8px 0 14px">输入邮箱，会收到一封带登录链接的邮件。</p>
       <input class="input" id="authEmail" type="email" placeholder="you@example.com">
       <button class="btn btn-primary btn-block" id="sendCode" style="margin-top:10px">发送邮件</button>
@@ -235,8 +240,30 @@ export function openLogin() {
         <input class="input" id="authCode" inputmode="numeric" placeholder="6 位验证码（可选）" maxlength="8">
         <button class="btn btn-block" id="doVerify" style="margin-top:10px">用验证码登录</button>
       </div>
-      <p id="authMsg" style="font-size:12px;color:var(--text-4);margin-top:10px"></p></div>`;
+      <p id="authMsg" style="font-size:12px;color:var(--text-4);margin-top:10px"></p>
+      </div>
+      <div id="pwPane" class="hidden">
+        <input class="input" id="pwEmail" type="email" placeholder="邮箱" autocomplete="username">
+        <input class="input" id="pwPass" type="password" placeholder="密码" style="margin-top:8px" autocomplete="current-password">
+        <button class="btn btn-primary btn-block" id="pwLogin" style="margin-top:10px">登录</button>
+        <p id="pwMsg" style="font-size:12px;color:var(--text-4);margin-top:10px"></p>
+      </div></div>`;
     const msg = box.querySelector('#authMsg');
+    const mailPane = box.querySelector('#mailPane');
+    const pwPane = box.querySelector('#pwPane');
+    box.querySelector('#tabMail').onclick = () => { mailPane.classList.remove('hidden'); pwPane.classList.add('hidden'); };
+    box.querySelector('#tabPw').onclick = () => { pwPane.classList.remove('hidden'); mailPane.classList.add('hidden'); };
+
+    const pwMsg = box.querySelector('#pwMsg');
+    box.querySelector('#pwLogin').onclick = async () => {
+      const em = box.querySelector('#pwEmail').value.trim();
+      const pw = box.querySelector('#pwPass').value;
+      if (!em || !pw) return (pwMsg.textContent = '邮箱和密码都要填');
+      pwMsg.textContent = '登录中…';
+      try { await signInWithPassword(em, pw); m.hidden = true; location.reload(); }
+      catch (e) { pwMsg.textContent = '登录失败：' + e.message; }
+    };
+
     box.querySelector('#sendCode').onclick = async () => {
       const em = box.querySelector('#authEmail').value.trim();
       if (!em) return (msg.textContent = '请填邮箱');
@@ -272,6 +299,13 @@ export function openLogin() {
     <div class="picker" id="pAvatars">${AVATARS.map((a) => `<button class="pick ${a === p.avatar && !p.img ? 'on' : ''}" data-av="${a}">${a}</button>`).join('')}</div>
     <label class="field-label">主题色</label>
     <div class="picker" id="pColors">${COLORS.map((c) => `<button class="pick-dot ${c === p.color ? 'on' : ''}" data-c="${c}" style="background:${c}"></button>`).join('')}</div>
+    <label class="field-label">登录密码（设置后可在任意设备用邮箱+密码登录）</label>
+    <div style="display:flex;gap:8px">
+      <input class="input" id="newPw" type="password" placeholder="至少 6 位" autocomplete="new-password">
+      <button class="btn" id="setPwBtn">设置</button>
+    </div>
+    <p id="pwInfo" style="font-size:11.5px;color:var(--text-4);margin-top:6px"></p>
+
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" id="pSave" style="flex:1">保存资料</button>
       <button class="btn" id="doLogout">退出登录</button>
@@ -309,6 +343,16 @@ export function openLogin() {
     refreshAuthButton();
     toast('资料已保存');
   };
+  const setPwBtn = box.querySelector('#setPwBtn');
+  if (setPwBtn) setPwBtn.onclick = async () => {
+    const pw = box.querySelector('#newPw').value;
+    const info = box.querySelector('#pwInfo');
+    if (!pw || pw.length < 6) return (info.textContent = '密码至少 6 位');
+    info.textContent = '设置中…';
+    try { await setPassword(pw); info.textContent = '✓ 密码已设置，可在其他设备用邮箱+密码登录'; box.querySelector('#newPw').value = ''; }
+    catch (e) { info.textContent = '失败：' + e.message; }
+  };
+
   box.querySelector('#doLogout').onclick = () => { DRAFT = null; logout(); m.hidden = true; location.reload(); };
 }
 
