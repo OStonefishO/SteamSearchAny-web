@@ -742,10 +742,255 @@ let PAGE = 0;
 let VIEW = 'list';
 let CUR = null;
 
+/* ================= 我的信息（资料 / 收藏夹 / 我的帖子） ================= */
+const ME_TAB_KEY = 'lh.meTab';
+const FAV_LS_KEY = 'lighthouse.favs.v1';
+
+function favIdList() {
+  try {
+    const f = window.LH_FAV;
+    if (f && typeof f.ids === 'function') return f.ids();
+    const arr = JSON.parse(localStorage.getItem(FAV_LS_KEY) || '[]');
+    return Array.isArray(arr) ? arr.map(Number).filter((n) => Number.isFinite(n) && n > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
+function favToggle(id) {
+  const f = window.LH_FAV;
+  if (f && typeof f.toggle === 'function') return f.toggle(id);
+  const ids = favIdList();
+  const i = ids.indexOf(Number(id));
+  if (i >= 0) ids.splice(i, 1); else ids.unshift(Number(id));
+  try { localStorage.setItem(FAV_LS_KEY, JSON.stringify(ids)); } catch {}
+  return i < 0;
+}
+
+const FAV_CDN = (id, kind) => 'https://cdn.akamai.steamstatic.com/steam/apps/' + id + '/' + (kind === 'cover' ? 'library_600x900.jpg' : 'header.jpg');
+
+function favCardHtml(g) {
+  const rev = g.rev || {};
+  const pct = typeof rev.pct === 'number' ? Math.round(rev.pct) : null;
+  const pill = pct === null ? '无评测' : pct + '% 好评';
+  const pillCls = pct === null ? '' : pct >= 90 ? ' good' : pct >= 75 ? ' mid' : ' bad';
+  const sub = [g.year || null, rev.total ? rev.total + ' 评' : null, g.price && g.price !== '¥0.00' ? g.price : null].filter(Boolean).join(' · ');
+  return '<article class="fav-card" data-gid="' + g.id + '" tabindex="0" role="button">' +
+    '<div class="fav-media">' +
+      '<img src="' + esc(g.cover || FAV_CDN(g.id, 'cover')) + '" alt="' + esc(g.name) + '" loading="lazy" decoding="async" ' +
+        'onerror="this.onerror=null;this.src=\'' + FAV_CDN(g.id, 'header') + '\'">' +
+      '<span class="card-pill left' + pillCls + '">' + pill + '</span>' +
+      '<button class="fav-star" data-unfav="' + g.id + '" title="取消收藏" aria-label="取消收藏">★</button>' +
+    '</div>' +
+    '<div class="fav-name">' + esc(g.name) + '</div>' +
+    (sub ? '<div class="fav-sub">' + esc(sub) + '</div>' : '') +
+  '</article>';
+}
+
+export async function renderMe(root) {
+  if (!root) return;
+  const me0 = profile();
+  const mail = currentEmail();
+  let tab = localStorage.getItem(ME_TAB_KEY) === 'posts' ? 'posts' : 'fav';
+  let favLoaded = null;   // 收藏条目缓存，切 tab 不重复拉
+  let postRows = null;
+  let alive = true;
+
+  root.innerHTML = '<section class="me-hero">' +
+      '<div class="me-hero-top">' +
+        '<span class="me-av">' + avatarHtml(me0, 76) + '</span>' +
+        '<div class="me-id">' +
+          '<h3 class="me-name">' + esc(me0.name || '未登录') + (mail ? '<span class="post-uid">#' + me0.id + '</span>' : '') + '</h3>' +
+          '<div class="me-mail">' + (mail ? esc(mail) : '还没登录 · 登录后能发帖、加好友、跨设备同步') + '</div>' +
+          '<p class="me-bio">' + esc(mail ? (me0.bio || '这个人懒得写简介') : '——') + '</p>' +
+        '</div>' +
+        '<div class="me-actions">' +
+          '<button class="btn btn-primary btn-sm" id="meEdit">' + (mail ? '编辑资料' : '登录') + '</button>' +
+          (mail ? '<button class="btn btn-sm" id="meFriends">好友</button>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="me-stats">' +
+        '<button class="me-stat" data-mtab="fav"><b id="meFavN">' + favIdList().length + '</b><span>收藏</span></button>' +
+        '<button class="me-stat" data-mtab="posts"><b id="mePostN">—</b><span>我的帖子</span></button>' +
+        '<div class="me-stat ghost"><b>' + (mail ? '#' + me0.id : '—') + '</b><span>UID</span></div>' +
+      '</div>' +
+    '</section>' +
+    '<nav class="me-tabs">' +
+      '<button class="me-tab" data-mtab="fav">收藏夹 <i id="meFavC">' + favIdList().length + '</i></button>' +
+      '<button class="me-tab" data-mtab="posts">我的帖子 <i id="mePostC">' + (postRows ? postRows.length : 0) + '</i></button>' +
+      '<span class="me-tab-hint">以后的新功能也会长在这里</span>' +
+    '</nav>' +
+    '<div id="mePane"><div class="empty-state"><span class="spin"></span></div></div>';
+
+  const pane = root.querySelector('#mePane');
+  const setTabBtns = () => {
+    root.querySelectorAll('[data-mtab]').forEach((b) => b.classList.toggle('on', b.dataset.mtab === tab));
+  };
+
+  const loadFavs = async () => {
+    const ids = favIdList();
+    if (!ids.length) return [];
+    try {
+      const r = await fetch('/api/byids?ids=' + ids.slice(0, 400).join(','), { headers: { Accept: 'application/json' } });
+      const d = await r.json();
+      const items = (d && d.items) || [];
+      const byId = new Map(items.map((g) => [g.id, g]));
+      return ids.map((id) => byId.get(id)).filter(Boolean);
+    } catch {
+      return [];
+    }
+  };
+
+  const paintFavs = async (force) => {
+    if (!alive) return;
+    const ids = favIdList();
+    root.querySelector('#meFavN').textContent = String(ids.length);
+    root.querySelector('#meFavC').textContent = String(ids.length);
+    if (!ids.length) {
+      favLoaded = [];
+      pane.innerHTML = '<div class="me-empty"><span class="big">☆</span>还没有收藏<br>' +
+        '<span>在「盲盒发现」里把鼠标移到卡片上，点右上角的 ☆ 就能收藏；收藏只存在这台设备上。</span></div>';
+      return;
+    }
+    if (!favLoaded || force) {
+      pane.innerHTML = '<div class="empty-state"><span class="spin"></span>正在取回收藏…</div>';
+      favLoaded = await loadFavs();
+    }
+    if (!alive) return;
+    if (!favLoaded.length) {
+      pane.innerHTML = '<div class="me-empty">收藏里的这几款不在当前语料里，等等数据更新再来看看。</div>';
+      return;
+    }
+    pane.innerHTML = '<div class="fav-grid">' + favLoaded.map(favCardHtml).join('') + '</div>' +
+      '<p class="me-foot">共 ' + ids.length + ' 款收藏' +
+        (favLoaded.length !== ids.length ? '，其中 ' + favLoaded.length + ' 款在当前语料里' : '') +
+        ' · 点卡片看详情，点 ★ 取消收藏</p>';
+  };
+
+  const paintPosts = async (force) => {
+    if (!alive) return;
+    const em = currentEmail();
+    if (!em) {
+      pane.innerHTML = '<div class="me-empty"><span class="big">📝</span>登录后才能看到自己发过的帖子<br><br>' +
+        '<button class="btn btn-primary btn-sm" id="meLogin2">去登录</button></div>';
+      const b = pane.querySelector('#meLogin2');
+      if (b) b.onclick = () => openLogin();
+      return;
+    }
+    if (!postRows || force) {
+      pane.innerHTML = '<div class="empty-state"><span class="spin"></span>正在读取你的帖子…</div>';
+      try {
+        postRows = await rest('/rest/v1/posts?select=id,title,body,game_id,game_name,images,created_at&author_email=eq.' + encodeURIComponent(em) + '&order=created_at.desc&limit=100') || [];
+      } catch (e) {
+        pane.innerHTML = '<div class="me-empty">读取失败：' + esc(e.message) + '</div>';
+        return;
+      }
+    }
+    if (!alive) return;
+    const n = postRows.length;
+    root.querySelector('#mePostN').textContent = String(n);
+    root.querySelector('#mePostC').textContent = String(n);
+    if (!n) {
+      pane.innerHTML = '<div class="me-empty"><span class="big">🌱</span>还没有发过帖子<br><span>去「社区」随便聊一款游戏试试</span></div>';
+      return;
+    }
+    pane.innerHTML = '<div class="me-posts">' + postRows.map((x) => {
+      const imgs = Array.isArray(x.images) ? x.images : [];
+      return '<article class="me-post" data-post="' + x.id + '">' +
+        '<div class="me-post-main">' +
+          '<div class="me-post-top"><b>' + esc(x.title || (x.body || '').slice(0, 18) || '无标题') + '</b>' +
+            (x.game_name ? '<span class="me-post-game">' + esc(x.game_name) + '</span>' : '') + '</div>' +
+          '<p class="me-post-body">' + esc((x.body || '').length > 110 ? x.body.slice(0, 110) + '…' : (x.body || '')) + '</p>' +
+          '<div class="me-post-meta">' + timeAgo(x.created_at) + (imgs.length ? ' · ' + imgs.length + ' 张图' : '') + '</div>' +
+        '</div>' +
+        '<button class="btn btn-sm me-post-del" data-del="' + x.id + '">删除</button>' +
+      '</article>';
+    }).join('') + '</div>' +
+      '<p class="me-foot">共 ' + n + ' 篇 · 点一行去社区看完整评论</p>';
+
+    pane.querySelectorAll('[data-post]').forEach((el) => {
+      el.onclick = (ev) => {
+        if (ev.target.closest('[data-del]')) return;
+        window.__lhOpenPost = Number(el.dataset.post);
+        document.dispatchEvent(new CustomEvent('lh:gotoCommunity'));
+      };
+    });
+    pane.querySelectorAll('[data-del]').forEach((el) => {
+      el.onclick = async (ev) => {
+        ev.stopPropagation();
+        if (!confirm('删除这条帖子？')) return;
+        el.disabled = true;
+        try {
+          await rest('/rest/v1/posts?id=eq.' + el.dataset.del, { method: 'DELETE' });
+          toast('已删除');
+          postRows = null;
+          paintPosts(true);
+        } catch (e) {
+          toast('删除失败：' + e.message);
+          el.disabled = false;
+        }
+      };
+    });
+  };
+
+  const paint = async (force) => {
+    setTabBtns();
+    localStorage.setItem(ME_TAB_KEY, tab);
+    if (tab === 'fav') await paintFavs(force); else await paintPosts(force);
+  };
+
+  root.querySelectorAll('[data-mtab]').forEach((b) => {
+    b.onclick = () => { tab = b.dataset.mtab === 'posts' ? 'posts' : 'fav'; paint(); };
+  });
+  const editBtn = root.querySelector('#meEdit');
+  if (editBtn) editBtn.onclick = () => openLogin();
+  const frBtn = root.querySelector('#meFriends');
+  if (frBtn) frBtn.onclick = () => openFriends();
+
+  // 帖子数：进页面就先查一次，别等切到「我的帖子」才更新
+  if (mail) {
+    rest('/rest/v1/posts?select=id&author_email=eq.' + encodeURIComponent(mail) + '&limit=200')
+      .then((rows) => {
+        if (!alive || postRows) return;
+        const n = (rows || []).length;
+        const a = root.querySelector('#mePostN');
+        const b = root.querySelector('#mePostC');
+        if (a) a.textContent = String(n);
+        if (b) b.textContent = String(n);
+      })
+      .catch(() => {});
+  }
+
+  // 收藏里的★：自己的事件（app.js 的全局星标只管卡片上的 data-fav）
+  pane.addEventListener('click', (ev) => {
+    const star = ev.target.closest('[data-unfav]');
+    if (star) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      favToggle(star.dataset.unfav);
+      paintFavs(true);
+      return;
+    }
+    const card = ev.target.closest('[data-gid]');
+    if (card) document.dispatchEvent(new CustomEvent('lh:openGame', { detail: { id: Number(card.dataset.gid) } }));
+  });
+
+  await paint(false);
+}
+
 export async function renderCommunity(root) {
   if (!isConfigured()) {
     root.innerHTML = `<div class="empty-state"><span class="big">🧩</span>社区还没接后端。</div>`;
     return;
+  }
+  // 「我的信息」点帖子：带上 id 过来，直接开详情
+  const pending = Number(window.__lhOpenPost || 0);
+  if (pending) {
+    window.__lhOpenPost = 0;
+    try {
+      const rows = await rest('/rest/v1/posts?select=id,title,game_id,game_name,body,images,author_name,author_id,author_avatar,author_email,created_at&id=eq.' + pending + '&limit=1');
+      if (rows && rows[0]) { CUR = rows[0]; VIEW = 'detail'; }
+    } catch {}
   }
   if (VIEW === 'detail' && CUR) return renderDetail(root);
   await renderList(root);
@@ -1869,6 +2114,8 @@ export function openChat(peerEmail, peerName) {
 
   const paintPresence = async () => {
     const st = box.querySelector('#chatState');
+    const sig = (p0) => (p0 ? String(p0.avatar || '') + '|' + String(p0.name || '') : '');
+    const sigBefore = sig(peerProf);
     try {
       const ps = await rest('/rest/v1/profiles?select=name,avatar,last_seen&user_email=eq.' + encodeURIComponent(peerEmail) + '&limit=1');
       const p0 = ps && ps[0];
@@ -1885,15 +2132,18 @@ export function openChat(peerEmail, peerName) {
       } else {
         st.innerHTML = '<i class="dot off"></i>离线';
       }
+      // 资料是异步来的：第一次 load() 时 peerProf 还是 null，气泡旁只能画默认 🎮。
+      // 这里对比头像/昵称签名，一变就强制重排一次消息，对方头像才补得上。
+      if (sig(peerProf) !== sigBefore) load(true);
     } catch (e) {
       st.innerHTML = '<i class="dot off"></i>离线';
     }
   };
 
-  const load = async () => {
+  const load = async (force) => {
     try {
       const rows = await rest('/rest/v1/messages?select=id,sender,receiver,body,images,created_at&or=(and(sender.eq.' + encodeURIComponent(me) + ',receiver.eq.' + encodeURIComponent(peerEmail) + '),and(sender.eq.' + encodeURIComponent(peerEmail) + ',receiver.eq.' + encodeURIComponent(me) + '))&order=created_at.asc&limit=200') || [];
-      if (rows.length === lastCount) return;
+      if (!force && rows.length === lastCount) return;
       lastCount = rows.length;
       const meP = profile();
       const meAv = avatarHtml({ avatar: meP.avatar, img: meP.img }, 30);

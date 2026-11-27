@@ -58,6 +58,86 @@ const CDN = (id, kind) => {
 };
 const STORE = (id) => `https://store.steampowered.com/app/${id}/`;
 
+// ---------------- 收藏（本机 localStorage，「我的信息」共用） ----------------
+const FAV_KEY = 'lighthouse.favs.v1';
+const favIds = (() => {
+  try {
+    const arr = JSON.parse(localStorage.getItem(FAV_KEY) || '[]');
+    return Array.isArray(arr) ? arr.map(Number).filter((n) => Number.isFinite(n) && n > 0) : [];
+  } catch {
+    return [];
+  }
+})();
+const favListeners = new Set();
+function favHas(id) {
+  return favIds.includes(Number(id));
+}
+function favSave() {
+  try {
+    localStorage.setItem(FAV_KEY, JSON.stringify(favIds));
+  } catch {}
+  favListeners.forEach((fn) => {
+    try {
+      fn(favIds.slice());
+    } catch {}
+  });
+}
+function syncFavButtons(root = document) {
+  $$('[data-fav]', root).forEach((b) => {
+    const on = favHas(b.dataset.fav);
+    b.classList.toggle('on', on);
+    b.textContent = on ? '★' : '☆';
+    b.title = on ? '取消收藏' : '收藏';
+    b.setAttribute('aria-label', b.title);
+  });
+}
+function toggleFav(id, name) {
+  const n = Number(id);
+  if (!n) return false;
+  const i = favIds.indexOf(n);
+  let on;
+  if (i >= 0) {
+    favIds.splice(i, 1);
+    on = false;
+  } else {
+    favIds.unshift(n);
+    on = true;
+  }
+  favSave();
+  syncFavButtons();
+  toast(on ? `已收藏${name ? '：' + name : ''}` : '已取消收藏');
+  return on;
+}
+function favBtnHtml(id) {
+  const on = favHas(id);
+  return `<button class="card-fav${on ? ' on' : ''}" data-fav="${id}" title="${on ? '取消收藏' : '收藏'}" aria-label="${on ? '取消收藏' : '收藏'}">${on ? '★' : '☆'}</button>`;
+}
+// 给「我的信息」等其它模块用
+window.LH_FAV = {
+  key: FAV_KEY,
+  ids: () => favIds.slice(),
+  has: favHas,
+  toggle: toggleFav,
+  onChange(fn) {
+    favListeners.add(fn);
+    return () => favListeners.delete(fn);
+  },
+};
+// 星标点击：捕获阶段拦下来，别让卡片的点击把详情打开
+document.addEventListener(
+  'click',
+  (ev) => {
+    const btn = ev.target.closest && ev.target.closest('[data-fav]');
+    if (!btn) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const host = btn.closest('.card');
+    const t = host && host.querySelector('.card-title');
+    toggleFav(btn.dataset.fav, t ? t.textContent.trim() : '');
+  },
+  true
+);
+
 const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -198,6 +278,7 @@ function cardHtml(g, index, { score = false } = {}) {
       ${right}
       <button class="card-info" data-info="${g.id}" title="游戏资料" aria-label="游戏资料">i</button>
       <button class="card-seed" data-seed="${g.id}" title="加为相似种子">＋</button>
+      ${favBtnHtml(g.id)}
       <div class="card-foot">
         <div class="card-title">${esc(g.name)}</div>
         ${sub ? `<div class="card-sub">${esc(sub)}</div>` : ''}
@@ -784,10 +865,19 @@ async function openInfo(g) {
 function switchView(view) {
   state.view = view;
   $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === view));
+  $('#view-me')?.classList.toggle('hidden', view !== 'me');
   $('#view-random').classList.toggle('hidden', view !== 'random');
   $('#view-similar').classList.toggle('hidden', view !== 'similar');
   $('#view-events')?.classList.toggle('hidden', view !== 'events');
   $('#view-community')?.classList.toggle('hidden', view !== 'community');
+  if (view === 'me') {
+    const box = $('#meBody');
+    import('./community.js?v=' + Date.now())
+      .then((m) => m.renderMe(box))
+      .catch((e) => {
+        box.innerHTML = '<div class="empty-state">「我的信息」加载失败：' + e.message + '</div>';
+      });
+  }
   if (view === 'community') {
     import('./community.js?v=' + Date.now()).then((m) => m.renderCommunity($('#communityBody'))).catch((e) => {
       $('#communityBody').innerHTML = '<div class="empty-state">社区加载失败：' + e.message + '</div>';
@@ -962,6 +1052,7 @@ function eventCard(g, deal) {
       ${deal?.discount ? `<span class="card-pill deal">-${deal.discount}%</span>` : ''}
       ${rev.total ? `<span class="card-pill left ${pctClass(rev.pct)}">${rev.pct}%</span>` : '<span class="card-pill left">无评测</span>'}
       <span class="card-pill right${(g.rev?.total || 0) >= 10000 ? ' hot' : ''}">${(g.rev?.total || 0) >= 10000 ? 'HOT' : '冷门 ' + (g.gem ?? 0)}</span>
+      ${favBtnHtml(g.id)}
       <div class="card-foot">
         <div class="card-title">${esc(g.name)}</div>
         <div class="card-sub">${[g.year, price, rev.total ? `${shortNum(rev.total)} 评` : null].filter(Boolean).join(' · ')}</div>
@@ -1064,6 +1155,23 @@ function boot() {
   $$('.tab').forEach((t) => t.addEventListener('click', () => switchView(t.dataset.view)));
   bindTip();
   bindEvents();
+
+  // #me / #community 之类的深链：直接开对应视图
+  const bootView = (location.hash || '').replace(/^#/, '');
+  if (['me', 'random', 'similar', 'events', 'community'].includes(bootView)) switchView(bootView);
+
+  // 「我的信息」里点收藏卡 / 点帖子 → 由这里跳转，别让两个页面互相 import
+  document.addEventListener('lh:gotoCommunity', () => switchView('community'));
+  document.addEventListener('lh:openGame', async (ev) => {
+    const id = Number(ev.detail && ev.detail.id);
+    if (!id) return;
+    try {
+      const data = await api('/api/game/' + id);
+      if (data.game) openDetail(data.game);
+    } catch (e) {
+      toast('打不开这款游戏：' + e.message);
+    }
+  });
 
   // 只绑定模式分段控件，别把「卡片尺寸」那组按钮一起卷进来
   $$('#modeSeg .seg-btn').forEach((b) =>

@@ -39,7 +39,7 @@
 </script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗼</text></svg>">
 <link rel="preload" href="fonts/inter-500.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=2026-11-26-11777-6375364-2zjb">
+<link rel="stylesheet" href="style.css?v=2026-11-26-11777-6375364-378b">
   <meta property="og:title" content="Steam 灯塔 · 找到没人注意到的那些游戏">
   <meta property="og:description" content="随机盲盒发现冷门佳作 + 多游戏加权相似检索（静态版，离线可跑）">
 </head>
@@ -84,6 +84,7 @@
   </div>
 
   <nav class="tabs" role="tablist">
+    <button class="tab" data-view="me" role="tab">我的信息</button>
     <button class="tab active" data-view="random" role="tab">盲盒发现</button>
     <button class="tab" data-view="similar" role="tab">相似追踪</button>
     <button class="tab" data-view="events" role="tab">Steam 现场</button>
@@ -289,6 +290,17 @@
     <div id="communityBody"></div>
   </section>
 
+  <!-- ================= 我的信息 ================= -->
+  <section class="view hidden" id="view-me">
+    <div class="view-head">
+      <div>
+        <h2>我的信息</h2>
+        <p>资料、收藏夹、自己发过的帖子都在这。以后新的功能也往这里长。</p>
+      </div>
+    </div>
+    <div id="meBody"><div class="empty-state"><span class="spin"></span></div></div>
+  </section>
+
 </main>
 
 <footer class="foot">
@@ -320,8 +332,8 @@
 
 <script src="config.js"></script>
   <script>window.LIGHTHOUSE_STATIC = true;</script>
-<script src="local-api.js?v=2026-11-26-11777-6375364-2zjb"></script>
-<script src="app.js?v=2026-11-26-11777-6375364-2zjb" type="module"></script>
+<script src="local-api.js?v=2026-11-26-11777-6375364-378b"></script>
+<script src="app.js?v=2026-11-26-11777-6375364-378b" type="module"></script>
 
 <script id="LH_BOOT_AUTH">
 // 独立绑定登录按钮：即使主程序还没就绪也能打开登录框
