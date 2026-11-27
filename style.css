@@ -1103,3 +1103,8 @@ textarea.input { resize: vertical; min-height: 96px; }
   .chat-pic img { width: 90px; }
   .chat-emoji { grid-template-columns: repeat(6, 34px); }
 }
+
+
+.star { color: #ffb04d; margin-right: 5px; font-size: 12px; }
+.cmt-menu button.danger { color: #ff8f8a; }
+.cmt-menu button.danger:hover { background: rgba(244,115,111,.12); }

@@ -541,7 +541,7 @@ export async function openAuthor(name, uid) {
       prof = ps && ps[0];
     } catch (e) {}
     const bioText = (prof && prof.bio) ? prof.bio : '这个人懒得写简介';
-    const av = rows[0]?.author_avatar || '🎮';
+    const av = (prof && prof.avatar) || (rows[0] && rows[0].author_avatar) || '🎮';
     box.innerHTML = `<div class="m-body">
       <div class="profile-head">${avatarHtml({ avatar: av.startsWith('data:') ? '🎮' : av, img: av.startsWith('data:') ? av : '' }, 56)}
         <div><div class="profile-name">${esc(name)}<span class="post-uid">#${uid || (rows[0] && rows[0].author_id) || '----'}</span></div>
@@ -1465,8 +1465,11 @@ export async function openFriends() {
   let incoming = [], outgoing = [], accepted = [];
   try {
     incoming = await rest('/rest/v1/' + FR + '?select=id,requester,created_at&target=eq.' + encodeURIComponent(me) + '&status=eq.pending') || [];
-    outgoing = await rest('/rest/v1/' + FR + '?select=id,target,created_at&requester=eq.' + encodeURIComponent(me) + '&status=eq.pending') || [];
-    accepted = await rest('/rest/v1/' + FR + '?select=id,requester,target,status&status=eq.accepted&or=(requester.eq.' + encodeURIComponent(me) + ',target.eq.' + encodeURIComponent(me) + ')') || [];
+    const acc0 = await rest('/rest/v1/' + FR + '?select=target&status=eq.accepted&requester=eq.' + encodeURIComponent(me)) || [];
+    const accSet = new Set((acc0 || []).map((r) => r.target));
+    outgoing = (await rest('/rest/v1/' + FR + '?select=id,target,created_at&requester=eq.' + encodeURIComponent(me) + '&status=eq.pending') || []).filter((r) => !accSet.has(r.target));
+    accepted = await rest('/rest/v1/' + FR + '?select=id,requester,target,status,remark,starred&status=eq.accepted&or=(requester.eq.' + encodeURIComponent(me) + ',target.eq.' + encodeURIComponent(me) + ')') || [];
+    accepted.sort((a, b) => (b.starred ? 1 : 0) - (a.starred ? 1 : 0));
   } catch (e) {
     body.innerHTML = '<div class="empty-state">读取失败：' + esc(e.message) + '<br><span style="font-size:12px;color:var(--text-4)">多半是 friendships 表还没建</span></div>';
     return;
@@ -1508,11 +1511,12 @@ export async function openFriends() {
     ? accepted.map((x) => {
         const other = x.requester === me ? x.target : x.requester;
         return '<div class="fr-row">' + av(other) +
-          '<div class="fr-info"><b>' + esc(nm(other)) + '<span class="post-uid">#' + esc(uidOf(other) || '----') + '</span></b>' +
+          '<div class="fr-info"><b>' + (x.starred ? '<span class="star">★</span>' : '') + esc(x.remark || nm(other)) +
+          '<span class="post-uid">#' + esc(uidOf(other) || '----') + '</span></b>' +
           '<span class="fr-sub">' + esc((profMap[other] && profMap[other].bio) || '这个人懒得写简介') + '</span></div>' +
           '<button class="btn btn-sm btn-primary" data-chat="' + esc(other) + '" data-cname="' + esc(nm(other)) + '">聊天</button>' +
           '<button class="btn btn-sm" data-view="' + esc(other) + '">主页</button>' +
-          '<button class="btn btn-sm" data-unfriend="' + x.id + '">解除</button></div>';
+          '<button class="btn btn-sm" data-manage="' + x.id + '" data-em="' + esc(other) + '" data-nm="' + esc(nm(other)) + '" data-rm="' + esc(x.remark || '') + '" data-star="' + (x.starred ? '1' : '') + '">管理</button></div>';
       }).join('')
     : '<div class="fr-empty">还没有好友，去帖子或主页里点「加为好友」</div>';
   html += '</div>';
@@ -1555,15 +1559,8 @@ export async function openFriends() {
       } catch (e) { toast('失败'); }
     };
   });
-  body.querySelectorAll('[data-unfriend]').forEach((b) => {
-    b.onclick = async () => {
-      if (!confirm('解除好友关系？')) return;
-      try {
-        await rest('/rest/v1/' + FR + '?id=eq.' + b.dataset.unfriend, { method: 'DELETE' });
-        openFriends();
-        paintFriendDot();
-      } catch (e) { toast('失败'); }
-    };
+  body.querySelectorAll('[data-manage]').forEach((b) => {
+    b.onclick = () => openFriendMenu(b, () => openFriends());
   });
   body.querySelectorAll('[data-chat]').forEach((b) => {
     b.onclick = () => openChat(b.dataset.chat, b.dataset.cname);
@@ -1692,4 +1689,52 @@ export function openChat(peerEmail, peerName) {
 
   load();
   timer = setInterval(() => { if (!closed) load(); }, 4000);
+}
+
+
+/* 好友管理菜单 */
+function openFriendMenu(anchor, after) {
+  document.querySelectorAll('.cmt-menu').forEach((n) => n.remove());
+  const id = anchor.dataset.manage;
+  const em = anchor.dataset.em;
+  const nm = anchor.dataset.nm;
+  const rm = anchor.dataset.rm || '';
+  const star = anchor.dataset.star === '1';
+
+  const menu = document.createElement('div');
+  menu.className = 'cmt-menu';
+  menu.innerHTML = '<button data-act="remark">' + (rm ? '修改备注' : '设置备注') + '</button>' +
+    '<button data-act="star">' + (star ? '取消星标' : '设为星标') + '</button>' +
+    '<button data-act="del" class="danger">删除好友</button>';
+  document.body.appendChild(menu);
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = Math.max(8, r.right - 140) + 'px';
+  menu.style.top = (r.bottom + 6) + 'px';
+  setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
+
+  menu.onclick = async (e) => {
+    const act = e.target.closest('[data-act]');
+    if (!act) return;
+    const kind = act.dataset.act;
+    menu.remove();
+    try {
+      if (kind === 'remark') {
+        const v = prompt('给 ' + nm + ' 设置备注名（留空取消）：', rm);
+        if (v === null) return;
+        await rest('/rest/v1/' + FR + '?id=eq.' + id, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: { remark: v.trim().slice(0, 16) } });
+        toast('备注已更新');
+      } else if (kind === 'star') {
+        await rest('/rest/v1/' + FR + '?id=eq.' + id, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: { starred: !star } });
+        toast(star ? '已取消星标' : '已设为星标');
+      } else if (kind === 'del') {
+        if (!confirm('确定删除好友「' + nm + '」？')) return;
+        await rest('/rest/v1/' + FR + '?id=eq.' + id, { method: 'DELETE' });
+        toast('已删除好友');
+      }
+      if (after) after();
+      paintFriendDot();
+    } catch (err) {
+      toast('操作失败：' + err.message);
+    }
+  };
 }
