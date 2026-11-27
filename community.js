@@ -922,7 +922,8 @@ export function openRelaySend() {
 /** 忘记密码：发恢复邮件 */
 export async function recoverPassword(email) {
   const cfg = window.LIGHTHOUSE_SUPABASE || {};
-  const res = await fetch(cfg.url + '/auth/v1/recover', {
+  const back = encodeURIComponent('https://ostonefisho.github.io/SteamSearchAny-auth/');
+  const res = await fetch(cfg.url + '/auth/v1/recover?redirect_to=' + back, {
     method: 'POST',
     headers: { apikey: cfg.anonKey, 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
