@@ -22,6 +22,8 @@ export function profile() {
 }
 function saveProfile(p) { try { localStorage.setItem(PK, JSON.stringify(p)); } catch {} }
 
+let DRAFT = null;   // 账号面板的临时编辑状态，跨弹窗保留
+
 const AVATARS = ['🎮', '🕹️', '👾', '🚀', '🌌', '🐱', '🦊', '🐳', '🌙', '⭐', '🔥', '🎧'];
 const COLORS = ['#45bdf7', '#b6e04a', '#ffb04d', '#f4736f', '#a78bfa', '#34d399', '#f472b6'];
 
@@ -91,6 +93,7 @@ function openAvatarEditor(file, onDone) {
         out.getContext('2d').drawImage(cv, 0, 0, 96, 96);
         onDone(out.toDataURL('image/jpeg', 0.82));
         m.hidden = true;
+        openLogin();
       };
       box.querySelector('#cropCancel').onclick = () => (m.hidden = true);
     };
@@ -140,7 +143,8 @@ export function openLogin() {
     return;
   }
 
-  const p = profile();
+  DRAFT = DRAFT || { ...profile() };
+  const p = DRAFT;
   box.innerHTML = `<div class="m-body">
     <h3>我的账号</h3>
     <div class="profile-head">
@@ -176,13 +180,13 @@ export function openLogin() {
       <button class="btn" id="doLogout">退出登录</button>
     </div></div>`;
 
-  let draft = { ...p };
+  const draft = DRAFT;
   const preview = () => { const el = box.querySelector('#avatarPreview'); if (el) el.innerHTML = avatarHtml(draft, 56); };
 
   box.querySelector('#uploadBtn').onclick = () => box.querySelector('#fileIn').click();
   box.querySelector('#fileIn').onchange = (e) => {
     const f = e.target.files && e.target.files[0];
-    if (f) openAvatarEditor(f, (dataUrl) => { draft.img = dataUrl; preview(); });
+    if (f) openAvatarEditor(f, (dataUrl) => { DRAFT = { ...(DRAFT || profile()), img: dataUrl }; });
   };
   box.querySelector('#clearImg').onclick = () => { draft.img = ''; preview(); };
   box.querySelector('#pAvatars').onclick = (e) => {
@@ -203,12 +207,13 @@ export function openLogin() {
   box.querySelector('#pSave').onclick = () => {
     draft.name = (box.querySelector('#pName').value || '').trim().slice(0, 16) || email.split('@')[0];
     saveProfile(draft);
+    DRAFT = null;
     m.hidden = true;
     refreshAuthButton();
     toast('资料已保存');
     if (window.LH_COMMUNITY_REFRESH) window.LH_COMMUNITY_REFRESH();
   };
-  box.querySelector('#doLogout').onclick = () => { logout(); m.hidden = true; location.reload(); };
+  box.querySelector('#doLogout').onclick = () => { DRAFT = null; logout(); m.hidden = true; location.reload(); };
 }
 
 export function refreshAuthButton() {
