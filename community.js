@@ -739,6 +739,22 @@ async function renderList(root) {
 
   const { counts, mine } = await loadReactions(posts.map((x) => x.id).join(','));
 
+  const cRows = await rest('/rest/v1/comments?select=id,post_id,body,author_name,created_at&post_id=in.(' + posts.map((x) => x.id).join(',') + ')&order=created_at.asc').catch(() => []);
+  const cmtMap = new Map();
+  for (const cm of cRows || []) {
+    if (!cmtMap.has(cm.post_id)) cmtMap.set(cm.post_id, []);
+    cmtMap.get(cm.post_id).push(cm);
+  }
+  const cmtPreview = (pid) => {
+    const all = cmtMap.get(pid) || [];
+    if (!all.length) return '';
+    const shown = all.slice(0, 3);
+    return '<div class="cmt-preview">' +
+      shown.map((cm) => '<div class="cmt-line"><b>' + esc(cm.author_name) + '</b> ' + esc(cm.body) + '</div>').join('') +
+      (all.length > 3 ? '<div class="cmt-more">还有 ' + (all.length - 3) + ' 条评论 · 点击帖子查看全部</div>' : '') +
+      '</div>';
+  };
+
   list.innerHTML = posts.map((x) => {
     const av = avatarOf(x);
     const c = counts.get(x.id) || {};
@@ -749,9 +765,11 @@ async function renderList(root) {
       (x.game_id ? '<a class="post-game" href="?info=' + x.game_id + '" data-noclick="1">' + esc(x.game_name) + '</a>' : '<span class="post-game plain">' + esc(x.game_name) + '</span>') +
       '<span class="post-meta">' + esc(x.author_name) + ' · ' + timeAgo(x.created_at) + '</span></header>' +
       (x.title ? '<h4 class="post-title">' + esc(x.title) + '</h4>' : '') +
-      '<p class="post-body">' + esc(x.body).slice(0, 160) + (x.body.length > 160 ? '…' : '') + '</p>' +
+      '<p class="post-body">' + (x.body.length > 180 ? esc(x.body).slice(0, 180) + '…' : esc(x.body)) + '</p>' +
       (imgs.length ? '<div class="imgs">' + imgs.slice(0, 4).map((src) => '<img src="' + src + '">').join('') + (imgs.length > 4 ? '<span class="more-img">+' + (imgs.length - 4) + '</span>' : '') + '</div>' : '') +
-      '<div class="post-foot">' + reactionHtml(x.id, c, my, false) + '<span class="cmt-n" data-noclick="1">评论</span></div>' +
+      cmtPreview(x.id) +
+      '<div class="post-foot">' + reactionHtml(x.id, c, my, false) +
+      '<span class="open-hint" data-noclick="1">点击帖子查看完整内容与评论 →</span></div>' +
       '</article>';
   }).join('');
 
