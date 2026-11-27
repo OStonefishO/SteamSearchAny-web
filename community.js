@@ -1288,13 +1288,18 @@ async function renderDetail(root) {
   const imgs = Array.isArray(x.images) ? x.images : [];
   root.innerHTML = '<div class="cmt-bar"><button class="btn" id="backBtn">← 返回社区</button>' +
     '<span style="flex:1"></span>' +
-    '<button class="btn btn-sm" id="sharePostBtn">分享</button>' +
     '<button class="btn btn-sm" id="delPost" style="display:none">删除帖子</button></div>' +
     '<article class="post">' +
     '<header>' + avatarHtml(av, 34) +
     '<a class="post-author" data-author="' + esc(x.author_name) + '" data-aid="' + (x.author_id || '') + '">' + esc(x.author_name) + '<span class="post-uid">#' + (x.author_id || '----') + '</span></a>' +
     (x.game_id ? '<a class="post-game" href="?info=' + x.game_id + '">' + esc(x.game_name) + '</a>' : '<span class="post-game plain">' + esc(x.game_name) + '</span>') +
-    '<span class="post-meta">' + timeAgo(x.created_at) + '</span></header>' +
+    '<span class="post-meta">' + timeAgo(x.created_at) + '</span>' +
+    '<button class="post-share" id="sharePostBtn" type="button" title="分享这条帖子" aria-label="分享这条帖子">' +
+      '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M4 16c0-4.4 3.6-8 8-8h7"/><path d="M15 4.5l4.5 3.5L15 11.5"/></svg>' +
+      '<span>分享</span>' +
+    '</button>' +
+    '</header>' +
     (x.title ? '<h4 class="post-title" style="font-size:18px">' + esc(x.title) + '</h4>' : '') +
     '<p class="post-body" style="font-size:14px">' + esc(x.body) + '</p>' +
     (imgs.length ? '<div class="detail-imgs">' + imgs.map((src) => mediaHtml(src)).join('') + '</div>' : '') +
