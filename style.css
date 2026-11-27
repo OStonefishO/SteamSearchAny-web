@@ -784,6 +784,40 @@ textarea.input { resize: vertical; min-height: 96px; }
 .bio-meta { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; font-size: 11.5px; color: var(--text-4); }
 .bio-meta b { color: var(--text-3); font-weight: 600; }
 
+/* 账号面板：标题别顶着弹窗上沿（m-body 的 -44px 负边距在无封面时会把标题切掉） */
+.acct-body {
+  margin-top: 0 !important;
+  padding-top: 52px !important;
+}
+
+/* 跨设备同步登录：账号面板顶部的常驻横幅（不折叠、一眼能看到） */
+.relay-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  margin: 2px 0 4px; padding: 10px 13px; border-radius: 12px;
+  text-align: left; cursor: pointer;
+  background: linear-gradient(90deg, rgba(76,194,255,.14), rgba(76,194,255,.03));
+  border: 1px solid rgba(76,194,255,.38);
+  transition: border-color .16s, background .16s, transform .16s;
+}
+.relay-row:hover {
+  border-color: var(--accent);
+  background: linear-gradient(90deg, rgba(76,194,255,.22), rgba(76,194,255,.06));
+}
+.relay-row:active { transform: scale(.997); }
+.relay-ic {
+  flex: none; width: 28px; height: 28px; border-radius: 9px;
+  display: grid; place-items: center; font-size: 15px;
+  background: rgba(76,194,255,.18); color: #9fe0ff;
+  border: 1px solid rgba(76,194,255,.4);
+}
+.relay-tx { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.relay-tx b { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.relay-tx em { font-style: normal; font-size: 11px; color: var(--text-4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.relay-go { margin-left: auto; flex: none; font-size: 12px; font-weight: 700; color: var(--accent); }
+@media (max-width: 620px) {
+  .relay-tx em { display: none; }
+}
+
 .save-row { display: flex; gap: 8px; margin-top: 16px; }
 .save-row .btn-primary { flex: 1; }
 .save-hint { margin-top: 8px; text-align: center; font-size: 11.5px; color: var(--amber); }

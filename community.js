@@ -339,11 +339,17 @@ export function openLogin() {
 
   DRAFT = DRAFT || { ...profile() };
   const p = DRAFT;
-  box.innerHTML = `<div class="m-body">
+  box.innerHTML = `<div class="m-body acct-body">
     <h3>我的账号</h3>
     <div class="profile-head"><span id="avatarPreview">${avatarHtml(p, 56)}</span>
       <div><div class="profile-name">${esc(p.name)}</div>
       <div class="profile-mail">${esc(email)} · UID #${p.id}</div></div></div>
+
+    <button type="button" class="relay-row" id="relayBtn">
+      <span class="relay-ic">⇄</span>
+      <span class="relay-tx"><b>同步登录到另一台设备</b><em>用 6 位配对码，把这台设备的登录状态搬到手机或另一台电脑</em></span>
+      <span class="relay-go">开始 →</span>
+    </button>
 
     <label class="field-label" for="pName">昵称</label>
     <input class="input" id="pName" maxlength="16" value="${esc(p.name)}">
@@ -392,7 +398,6 @@ export function openLogin() {
         <input class="input" id="newPw2" type="password" placeholder="再输一次确认" style="margin-top:8px" autocomplete="new-password">
         <div class="acc-row" style="margin-top:8px">
           <button class="btn btn-sm" id="setPwBtn">设置密码</button>
-          <button class="btn btn-sm" id="relayBtn">同步登录到另一台设备</button>
         </div>
         <p id="pwInfo" class="form-msg"></p>
       </div>
