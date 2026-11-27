@@ -271,18 +271,18 @@ export function openLogin() {
     box.querySelector('#pwLogin').onclick = async () => {
       const em = box.querySelector('#pwEmail').value.trim();
       const pw = box.querySelector('#pwPass').value;
-      if (!em || !pw) return (pwMsg.textContent = '邮箱和密码都要填');
+      if (!em || !pw) { pwMsg.className = 'form-msg form-err'; return (pwMsg.textContent = '✕ 邮箱和密码都要填'); }
       pwMsg.textContent = '登录中…';
-      try { await signInWithPassword(em, pw); m.hidden = true; location.reload(); }
-      catch (e) { pwMsg.textContent = '登录失败：' + e.message; }
+      try { await signInWithPassword(em, pw); localStorage.setItem('lh.hasPw', '1'); m.hidden = true; location.reload(); }
+      catch (e) { pwMsg.className = 'form-msg form-err'; pwMsg.textContent = '✕ 登录失败：' + e.message; }
     };
 
     box.querySelector('#sendCode').onclick = async () => {
       const em = box.querySelector('#authEmail').value.trim();
-      if (!em) return (msg.textContent = '请填邮箱');
+      if (!em) { msg.className = 'form-msg form-err'; return (msg.textContent = '✕ 请填邮箱'); }
       msg.textContent = '发送中…';
       try { await sendCode(em); box.querySelector('#codeBox').classList.remove('hidden'); msg.textContent = '邮件已发送'; }
-      catch (e) { msg.textContent = '失败：' + e.message; }
+      catch (e) { msg.className = 'form-msg form-err'; msg.textContent = '✕ 发送失败：' + e.message; }
     };
     box.querySelector('#doVerify').onclick = async () => {
       const code = box.querySelector('#authCode').value.trim();
@@ -312,6 +312,7 @@ export function openLogin() {
     <div class="picker" id="pAvatars">${AVATARS.map((a) => `<button class="pick ${a === p.avatar && !p.img ? 'on' : ''}" data-av="${a}">${a}</button>`).join('')}</div>
     <label class="field-label">主题色</label>
     <div class="picker" id="pColors">${COLORS.map((c) => `<button class="pick-dot ${c === p.color ? 'on' : ''}" data-c="${c}" style="background:${c}"></button>`).join('')}</div>
+    <div id="pwWarn" class="pw-warn hidden">⚠ 你还没设置登录密码<br><span>不设密码的话，换设备只能用邮件链接登录，很不方便。</span></div>
     <label class="field-label">登录密码（设置后可在任意设备用邮箱+密码登录）</label>
     <div style="display:flex;flex-direction:column;gap:8px">
       <input class="input" id="newPw" type="password" placeholder="设置密码（至少 6 位）" autocomplete="new-password">
@@ -357,6 +358,9 @@ export function openLogin() {
     refreshAuthButton();
     toast('资料已保存');
   };
+  const pwWarn = box.querySelector('#pwWarn');
+  if (pwWarn && !localStorage.getItem('lh.hasPw')) pwWarn.classList.remove('hidden');
+
   const setPwBtn = box.querySelector('#setPwBtn');
   if (setPwBtn) {
     const sendBtn = document.createElement('button');
@@ -370,16 +374,20 @@ export function openLogin() {
     const a = box.querySelector('#newPw').value;
     const b = box.querySelector('#newPw2').value;
     const info = box.querySelector('#pwInfo');
-    if (!a || a.length < 6) return (info.textContent = '密码至少 6 位');
-    if (a !== b) return (info.textContent = '两次输入的密码不一致');
-    info.textContent = '设置中…';
+    const show = (txt, kind) => { info.className = 'form-msg ' + (kind || ''); info.textContent = txt; };
+    if (!a || a.length < 6) return show('✕ 密码至少 6 位', 'form-err');
+    if (a !== b) return show('✕ 两次输入的密码不一致，请重新确认', 'form-err');
+    show('设置中…', 'form-dim');
     try {
       await setPassword(a);
-      info.textContent = '✓ 密码已设置，可在任意设备用邮箱+密码登录';
+      localStorage.setItem('lh.hasPw', '1');
+      const warnEl = box.querySelector('#pwWarn');
+      if (warnEl) warnEl.classList.add('hidden');
+      show('✓ 密码已设置，可在任意设备用邮箱+密码登录', 'form-ok');
       box.querySelector('#newPw').value = '';
       box.querySelector('#newPw2').value = '';
     } catch (e) {
-      info.textContent = '失败：' + e.message;
+      show('✕ 设置失败：' + e.message, 'form-err');
     }
   };
 
