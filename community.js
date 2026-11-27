@@ -758,9 +758,12 @@ export async function openAuthor(name, uid) {
         </div>
         <div class="author-actions">
           <button class="btn btn-sm" id="authorLike" type="button">♥ 0</button>
-          <button class="btn btn-sm" id="authorBlock" type="button">拉黑</button>
           <span id="friendSlot"></span>
+          <button class="btn btn-sm author-more" id="authorMore" type="button" title="更多操作" aria-haspopup="true" aria-expanded="false">⋯</button>
         </div>
+      </div>
+      <div class="author-menu hidden" id="authorMenu">
+        <button class="author-menu-item danger" id="authorBlock" type="button">拉黑</button>
       </div>
       <div class="author-stats">
         <div class="author-stat"><b>${posts.length}</b><span>帖子</span></div>
@@ -817,7 +820,9 @@ export async function openAuthor(name, uid) {
           pushNotif({ user_email: target, kind: 'wall', post_title: '主页留言', from_name: p.name || me, body });
           paintWall(await loadWall(target));
         } catch (e) {
-          toast('留言失败：' + e.message);
+          const msg = String(e.message || e);
+          // 42501 = RLS 拒绝；把当前身份一起打出来，方便判断是策略问题还是没登录
+          toast('留言失败：' + msg + (/row-level security|42501/i.test(msg) ? '（当前身份：' + (me || '未登录') + '）' : ''));
           sendBtn.disabled = false;
         }
       };
@@ -909,9 +914,36 @@ export async function openAuthor(name, uid) {
   }
   const blockBtn = box.querySelector('#authorBlock');
   if (blockBtn) {
+    const moreBtn = box.querySelector('#authorMore');
+    const menu = box.querySelector('#authorMenu');
+
+    // ⋯ 菜单：拉黑这种不好撤回的操作收进二级菜单，别跟点赞按钮并排放
+    if (moreBtn && menu) {
+      const closeMenu = () => {
+        menu.classList.add('hidden');
+        moreBtn.setAttribute('aria-expanded', 'false');
+      };
+      moreBtn.onclick = (ev) => {
+        ev.stopPropagation();
+        const willOpen = menu.classList.contains('hidden');
+        menu.classList.toggle('hidden', !willOpen);
+        moreBtn.setAttribute('aria-expanded', String(willOpen));
+        if (willOpen) setTimeout(() => document.addEventListener('click', closeMenu, { once: true }), 0);
+      };
+      menu.addEventListener('click', () => setTimeout(closeMenu, 0));
+      menu.addEventListener('click', (ev) => ev.stopPropagation());
+      // 自己看自己的主页就别显示拉黑
+      if (!target || target === me) {
+        moreBtn.remove();
+        menu.remove();
+      }
+    }
+
     const paintBlock = (on) => {
-      blockBtn.textContent = on ? '已拉黑' : '拉黑';
+      blockBtn.textContent = on ? '解除拉黑' : '拉黑';
       blockBtn.classList.toggle('on', on);
+      const mb = box.querySelector('#authorMore');
+      if (mb) mb.classList.toggle('alert', on);
     };
     paintBlock(blockedByMe);
     blockBtn.onclick = async () => {
