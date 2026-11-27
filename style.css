@@ -1068,60 +1068,65 @@ textarea.input { resize: vertical; min-height: 96px; }
 
 
 /* 私聊 */
+#modalContent.chat-mode {
+  width: min(940px, 94vw);
+  max-width: min(940px, 94vw);
+  padding: 0;
+}
 .chat-body {
   position: relative;
-  width: min(680px, 92vw);
-  height: min(620px, 78vh);
-  display: flex; flex-direction: column; gap: 10px;
+  width: 100%;
+  height: min(760px, 86vh);
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 18px 20px 16px;
 }
-.chat-head { display: flex; align-items: center; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--line); flex: none; }
-.chat-head b { font-size: 15px; }
+.chat-head { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--line); flex: none; }
+.chat-head b { font-size: 16px; }
 .chat-sub { font-size: 11.5px; color: var(--text-4); }
+
 .chat-list {
   flex: 1 1 auto; min-height: 0; overflow-y: auto;
-  display: flex; flex-direction: column; gap: 8px;
-  padding: 12px; border-radius: 12px; background: #08111a; border: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 16px;
+  padding: 16px; border-radius: 14px; background: #08111a; border: 1px solid var(--line);
+  scroll-behavior: smooth;
 }
-.chat-msg { display: flex; flex-direction: column; align-items: flex-start; max-width: 78%; }
-.chat-msg.mine { align-self: flex-end; align-items: flex-end; }
+.chat-msg { display: flex; gap: 10px; align-items: flex-start; max-width: 82%; }
+.chat-msg.mine { align-self: flex-end; flex-direction: row-reverse; }
+.chat-av { flex: none; }
+.chat-main { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+.chat-msg.mine .chat-main { align-items: flex-end; }
+.chat-name { font-size: 11.5px; color: var(--text-4); font-weight: 600; }
 .bubble {
-  padding: 8px 12px; border-radius: 12px; background: #12202c;
-  border: 1px solid var(--line-2); font-size: 13px; line-height: 1.55; word-break: break-word;
+  padding: 9px 14px; border-radius: 14px; background: #12202c;
+  border: 1px solid var(--line-2); font-size: 13.5px; line-height: 1.6;
+  word-break: break-word; max-width: 100%;
 }
 .chat-msg.mine .bubble { background: rgba(69,189,247,.18); border-color: rgba(69,189,247,.45); }
-.chat-pic { display: flex; gap: 6px; margin-top: 4px; }
-.chat-pic img { width: 120px; border-radius: 10px; }
-.chat-time { font-size: 10.5px; color: var(--text-4); margin-top: 3px; }
+.chat-pic { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+.chat-pic img { width: 150px; border-radius: 10px; }
+.chat-time { font-size: 10.5px; color: var(--text-4); }
+
 .chat-compose { display: flex; gap: 8px; align-items: center; flex: none; }
+.chat-compose .input { height: 38px; }
 .chat-images { display: flex; gap: 8px; flex-wrap: wrap; flex: none; }
 
-/* 表情面板改为浮层，不挤压输入框 */
 .chat-emoji {
-  position: absolute; left: 8px; bottom: 62px; z-index: 6;
-  display: grid; grid-template-columns: repeat(8, 34px); gap: 6px;
-  padding: 10px; border-radius: 12px; background: #0c141d;
-  border: 1px solid var(--line-2); box-shadow: 0 22px 50px -24px #000;
+  position: absolute; left: 20px; bottom: 74px; z-index: 6;
+  display: grid; grid-template-columns: repeat(8, 36px); gap: 6px;
+  padding: 12px; border-radius: 14px; background: #0c141d;
+  border: 1px solid var(--line-2); box-shadow: 0 24px 54px -26px #000;
 }
 .chat-emoji.hidden { display: none; }
 .chat-emoji button {
-  width: 34px; height: 34px; font-size: 18px; border-radius: 8px;
+  width: 36px; height: 36px; font-size: 19px; border-radius: 9px;
   background: #0f1c27; border: 1px solid var(--line); cursor: pointer;
 }
 .chat-emoji button:hover { border-color: var(--accent); }
 
-@media (max-width: 600px) {
-  .chat-body { width: 94vw; height: 76vh; }
-  .chat-pic img { width: 90px; }
-  .chat-emoji { grid-template-columns: repeat(6, 34px); }
-}
-
-
-/* body 级浮标（红点） */
-.float-badge {
-  position: fixed; z-index: 9800; transform: translate(0, 0);
-  min-width: 17px; height: 17px; line-height: 17px; padding: 0 4px;
-  border-radius: 9px; background: #f4736f; color: #fff;
-  font-size: 10px; font-weight: 700; text-align: center;
-  box-shadow: 0 0 0 2px #0b1118;
-  pointer-events: none;
+@media (max-width: 700px) {
+  #modalContent.chat-mode { width: 96vw; max-width: 96vw; }
+  .chat-body { height: 82vh; padding: 14px; }
+  .chat-msg { max-width: 92%; }
+  .chat-pic img { width: 110px; }
+  .chat-emoji { grid-template-columns: repeat(6, 36px); left: 14px; }
 }

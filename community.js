@@ -1621,6 +1621,11 @@ export function openChat(peerEmail, peerName) {
   if (!me) return openLogin();
   if (peerEmail === me) return;
   m.hidden = false;
+  box.classList.add('chat-mode');
+
+  let peerProf = null;
+  rest('/rest/v1/profiles?select=name,avatar,uid&user_email=eq.' + encodeURIComponent(peerEmail) + '&limit=1')
+    .then((r) => { peerProf = r && r[0]; }).catch(() => {});
 
   box.innerHTML = '<div class="m-body chat-body">' +
     '<div class="chat-head"><b>' + esc(peerName || peerEmail) + '</b><span class="chat-sub">私聊</span>' +
@@ -1707,7 +1712,7 @@ export function openChat(peerEmail, peerName) {
     renderImgs();
     e.target.value = '';
   };
-  const close = () => { closed = true; if (timer) clearInterval(timer); m.hidden = true; };
+  const close = () => { closed = true; if (timer) clearInterval(timer); box.classList.remove('chat-mode'); m.hidden = true; };
   box.querySelector('#chatClose').onclick = close;
 
   load();
