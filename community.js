@@ -339,7 +339,7 @@ export function openLogin() {
     const relayBtn = document.createElement('button');
     relayBtn.className = 'btn btn-block';
     relayBtn.style.marginTop = '16px';
-    relayBtn.textContent = '手机已登录？同步到这台电脑';
+    relayBtn.textContent = '有设备已经登录？在主页同步过来';
     relayBtn.onclick = () => openRelayReceive();
     pwPane.parentElement.appendChild(relayBtn);
 
