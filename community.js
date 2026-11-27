@@ -388,6 +388,26 @@ export async function renderCommunity(root) {
     list.innerHTML = `<div class="empty-state">读取失败：${esc(e.message)}</div>`;
     return;
   }
+  // 自愈：把属于自己但缺 author_id 的老帖补齐（只跑一次）
+  const email = currentEmail();
+  if (email && !window.__uidBackfilled) {
+    const p = profile();
+    const need = posts.filter((x) => x.author_email === email && (!x.author_id || Number(x.author_id) !== p.id));
+    if (need.length) {
+      window.__uidBackfilled = true;
+      await Promise.all(
+        need.map((x) =>
+          rest('/rest/v1/posts?id=eq.' + x.id, {
+            method: 'PATCH',
+            headers: { Prefer: 'return=minimal' },
+            body: { author_id: p.id, author_name: p.name, author_avatar: p.img || p.avatar },
+          }).catch(() => {})
+        )
+      );
+      return renderCommunity(root);
+    }
+  }
+
   if (!posts.length) {
     list.innerHTML = `<div class="empty-state"><span class="big">🌱</span>还没有人发帖。<br><span style="font-size:12px;color:var(--text-4)">点「＋ 发帖」写第一条</span></div>`;
     return;
