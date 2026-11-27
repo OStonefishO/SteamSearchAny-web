@@ -39,7 +39,7 @@
 </script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗼</text></svg>">
 <link rel="preload" href="fonts/inter-500.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="style.css?v=2026-11-26-11777-6375364-2c7k">
+<link rel="stylesheet" href="style.css?v=2026-11-26-11777-6375364-2dv6">
   <meta property="og:title" content="Steam 灯塔 · 找到没人注意到的那些游戏">
   <meta property="og:description" content="随机盲盒发现冷门佳作 + 多游戏加权相似检索（静态版，离线可跑）">
 </head>
@@ -87,9 +87,11 @@
     <button class="tab active" data-view="random" role="tab">盲盒发现</button>
     <button class="tab" data-view="similar" role="tab">相似追踪</button>
     <button class="tab" data-view="events" role="tab">Steam 现场</button>
+    <button class="tab" data-view="community" role="tab">社区</button>
   </nav>
 
   <a class="icon-btn" href="https://github.com/OStonefishO/SteamSearchAny-web/releases/latest/download/SteamSearchAny.exe" title="下载 Windows 桌面版（2.6 MB，双击即用）" download rel="noreferrer">⬇</a>
+  <button class="icon-btn" id="authBtn" title="登录 / 账号">登</button>
   <button class="icon-btn" id="uiBtn" title="显示设置" aria-haspopup="true" aria-expanded="false">⚙</button>
   <div class="ui-panel" id="uiPanel" hidden>
     <div class="ui-row">
@@ -261,6 +263,17 @@
     <div id="eventsBody"></div>
   </section>
 
+  <!-- ================= 社区 ================= -->
+  <section class="view hidden" id="view-community">
+    <div class="view-head">
+      <div>
+        <h2>社区</h2>
+        <p>分享你随机到的游戏，聊聊它到底值不值得买。</p>
+      </div>
+    </div>
+    <div id="communityBody"></div>
+  </section>
+
 </main>
 
 <footer class="foot">
@@ -290,8 +303,9 @@
 <div class="toast" id="toast" hidden></div>
 <div class="tip" id="tip" hidden></div>
 
-<script>window.LIGHTHOUSE_STATIC = true;</script>
-<script src="local-api.js?v=2026-11-26-11777-6375364-2c7k"></script>
-<script src="app.js?v=2026-11-26-11777-6375364-2c7k" type="module"></script>
+<script src="/config.js"></script>
+  <script>window.LIGHTHOUSE_STATIC = true;</script>
+<script src="local-api.js?v=2026-11-26-11777-6375364-2dv6"></script>
+<script src="app.js?v=2026-11-26-11777-6375364-2dv6" type="module"></script>
 </body>
 </html>

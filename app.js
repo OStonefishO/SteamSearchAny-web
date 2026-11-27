@@ -743,7 +743,8 @@ async function openInfo(g) {
         <a class="btn btn-primary" href="${STORE(full.id)}" target="_blank" rel="noreferrer">Steam 商店 ↗</a>
         <a class="btn" href="${yt}" target="_blank" rel="noreferrer">YouTube ↗</a>
         <button class="btn" id="infoSeed">加为种子</button>
-        <button class="btn btn-quiet" id="infoDetail">完整详情</button>
+        <button class="btn" id="infoShare">分享到社区</button>
+      <button class="btn btn-quiet" id="infoDetail">完整详情</button>
       </div>
     </div>`;
 
@@ -753,6 +754,10 @@ async function openInfo(g) {
     switchView('similar');
     runSimilar();
   });
+  $('#infoShare', content)?.addEventListener('click', () => {
+    import('./community.js').then((m) => m.openComposer(full));
+  });
+
   $('#infoDetail', content)?.addEventListener('click', () => openDetail(full));
 
   // 宣传图翻页
@@ -782,6 +787,12 @@ function switchView(view) {
   $('#view-random').classList.toggle('hidden', view !== 'random');
   $('#view-similar').classList.toggle('hidden', view !== 'similar');
   $('#view-events')?.classList.toggle('hidden', view !== 'events');
+  $('#view-community')?.classList.toggle('hidden', view !== 'community');
+  if (view === 'community') {
+    import('./community.js').then((m) => m.renderCommunity($('#communityBody'))).catch((e) => {
+      $('#communityBody').innerHTML = '<div class="empty-state">社区加载失败：' + e.message + '</div>';
+    });
+  }
   if (view === 'similar') setTimeout(() => $('#seedInput')?.focus(), 60);
   if (view === 'events' && !state.eventsLoaded) {
     state.eventsLoaded = true;
@@ -1281,6 +1292,21 @@ function boot() {
 
   $$('[data-close]').forEach((el) => el.addEventListener('click', closeModal));
   $('#changelogBtn')?.addEventListener('click', openChangelog);
+
+  // 登录 / 社区
+  window.LH_TOAST = toast;
+  window.LH_COMMUNITY_REFRESH = () => {
+    if (state.view === 'community') {
+      import('./community.js').then((m) => m.renderCommunity($('#communityBody')));
+    }
+  };
+  import('./community.js').then((m) => {
+    const btn = $('#authBtn');
+    if (btn) {
+      btn.textContent = m.authLabel() === '登录' ? '登录' : m.authLabel();
+      btn.addEventListener('click', () => m.openLogin());
+    }
+  });
 
   // 画风特征后台就绪 -> 自动重算当前结果
   window.addEventListener('lighthouse:vision', () => {
