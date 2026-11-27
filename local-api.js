@@ -404,9 +404,9 @@
     let obscurity;
     if (total <= 120) obscurity = 1;
     else if (total <= 1000) obscurity = 1 - ((total - 120) / 880) * 0.35;
-    else if (total <= 10000) obscurity = 0.65 - ((total - 1000) / 9000) * 0.35;
-    else if (total <= 60000) obscurity = 0.3 - ((total - 10000) / 50000) * 0.2;
-    else obscurity = 0.05;
+    else if (total <= 5000) obscurity = 0.65 - ((total - 1000) / 4000) * 0.35;
+    else if (total <= 20000) obscurity = 0.3 - ((total - 5000) / 15000) * 0.25;
+    else obscurity = 0;
     const year = g.year || 0;
     const fresh = year >= nowYear - 2 ? 0.08 : year >= nowYear - 5 ? 0.04 : 0;
     return Math.round(Math.max(0, Math.min(1, 0.55 * quality + 0.45 * obscurity + fresh)) * 100);

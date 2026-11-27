@@ -383,6 +383,8 @@ select:focus, input[type='text']:focus { border-color: var(--accent-dim); box-sh
 .card-pill.right, .card-pill.score { left: 7px; right: auto; top: 33px; }
 .card-pill.right { color: var(--accent); border-color: rgba(76, 194, 255, 0.28); }
 .card-pill.score { height: 22px; padding: 0 8px; border-radius: 6px; background: #45bdf7; color: #04141e; border-color: #7fd4fb; font-size: 12px; font-weight: 700; }
+.card-pill.hot { color: #ffb04d; border-color: rgba(255, 176, 77, 0.5); background: rgba(255, 176, 77, 0.14); }
+.info-gem.hot { color: #ffb04d; border-color: rgba(255, 176, 77, 0.4); }
 .card-pill.deal { top: 7px; left: 50%; transform: translateX(-50%); background: #b6e04a; color: #101a05; border-color: #d4f36b; font-weight: 700; }
 .card-pill.good { color: var(--lime); border-color: rgba(182, 224, 74, 0.26); }
 .card-pill.mid { color: var(--amber); border-color: rgba(255, 187, 85, 0.26); }
