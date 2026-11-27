@@ -1628,25 +1628,27 @@ export function openChat(peerEmail, peerName) {
   box.classList.add('chat-mode');
 
   let peerProf = null;
-  rest('/rest/v1/profiles?select=name,avatar,uid&user_email=eq.' + encodeURIComponent(peerEmail) + '&limit=1')
-    .then((r) => { peerProf = r && r[0]; }).catch(() => {});
+  let closed = false;
+  let timer = null;
+  let lastCount = -1;
+  let pending = [];
 
-  box.innerHTML = '<div class="m-body chat-body">' +
+  box.innerHTML = '<div class="chat-body">' +
     '<div class="chat-head">' +
       '<button class="chat-back" id="chatBack" title="返回好友列表">←</button>' +
-      '<span id="chatPeerAv"></span>' +
-      '<div class="chat-id"><b>' + esc(peerName || peerEmail) + '</b>' +
-      '<span class="chat-state" id="chatState"><i class="dot"></i>读取中…</span></div>' +
+      '<span class="chat-av-slot" id="chatPeerAv"></span>' +
+      '<div class="chat-id"><b id="chatPeerName">' + esc(peerName || peerEmail) + '</b>' +
+        '<span class="chat-state" id="chatState"><i class="dot off"></i>读取中…</span></div>' +
       '<button class="chat-x" id="chatClose" title="关闭">×</button>' +
     '</div>' +
-    '<div class="chat-list" id="chatList"><div class="empty-state"><span class="spin"></span></div></div>' +
+    '<div class="chat-list" id="chatList"><div class="chat-loading">载入消息…</div></div>' +
     '<div class="chat-images" id="chatImgs"></div>' +
     '<div class="chat-compose">' +
-      '<button class="btn btn-sm" id="chatEmoji" title="表情">😊</button>' +
-      '<button class="btn btn-sm" id="chatPic" title="图片">🖼</button>' +
+      '<button class="chat-tool" id="chatEmoji" title="表情">🙂</button>' +
+      '<button class="chat-tool" id="chatPic" title="图片">🖼</button>' +
       '<input type="file" id="chatFile" accept="image/*" multiple class="hidden">' +
-      '<input class="input sm" id="chatInput" placeholder="说点什么…" style="flex:1">' +
-      '<button class="btn btn-sm btn-primary" id="chatSend">发送</button>' +
+      '<input class="chat-input" id="chatInput" placeholder="说点什么…">' +
+      '<button class="chat-send" id="chatSend">发送</button>' +
     '</div>' +
     '<div class="chat-emoji hidden" id="chatEmojiBox">' +
       CHAT_EMOJI.map((e) => '<button data-em="' + e + '">' + e + '</button>').join('') +
@@ -1655,16 +1657,35 @@ export function openChat(peerEmail, peerName) {
 
   const list = box.querySelector('#chatList');
   const imgsWrap = box.querySelector('#chatImgs');
-  let pending = [];
-  let timer = null;
-  let closed = false;
-  let lastCount = -1;
 
   const renderImgs = () => {
     imgsWrap.innerHTML = pending.map((src, i) => '<span class="thumb"><img src="' + src + '"><b data-rm="' + i + '">×</b></span>').join('');
-    imgsWrap.querySelectorAll('[data-rm]').forEach((b) => {
-      b.onclick = () => { pending.splice(Number(b.dataset.rm), 1); renderImgs(); };
+    imgsWrap.querySelectorAll('[data-rm]').forEach((btn) => {
+      btn.onclick = () => { pending.splice(Number(btn.dataset.rm), 1); renderImgs(); };
     });
+  };
+
+  const paintPresence = async () => {
+    const st = box.querySelector('#chatState');
+    try {
+      const ps = await rest('/rest/v1/profiles?select=name,avatar,last_seen&user_email=eq.' + encodeURIComponent(peerEmail) + '&limit=1');
+      const p0 = ps && ps[0];
+      peerProf = p0 || null;
+      if (p0) {
+        if (p0.name) box.querySelector('#chatPeerName').textContent = p0.name;
+        const img = String(p0.avatar || '');
+        box.querySelector('#chatPeerAv').innerHTML = avatarHtml({ avatar: img.startsWith('data:') ? '🎮' : (img || '🎮'), img: img.startsWith('data:') ? img : '' }, 32);
+        const last = p0.last_seen ? new Date(p0.last_seen).getTime() : 0;
+        const mins = last ? Math.floor((Date.now() - last) / 60000) : null;
+        if (mins !== null && mins <= 3) st.innerHTML = '<i class="dot"></i>在线';
+        else if (mins !== null) st.innerHTML = '<i class="dot off"></i>' + (mins < 60 ? mins + ' 分钟前在线' : Math.floor(mins / 60) + ' 小时前在线');
+        else st.innerHTML = '<i class="dot off"></i>离线';
+      } else {
+        st.innerHTML = '<i class="dot off"></i>离线';
+      }
+    } catch (e) {
+      st.innerHTML = '<i class="dot off"></i>离线';
+    }
   };
 
   const load = async () => {
@@ -1673,23 +1694,26 @@ export function openChat(peerEmail, peerName) {
       if (rows.length === lastCount) return;
       lastCount = rows.length;
       const meP = profile();
-      const meAv = avatarHtml({ avatar: meP.avatar, img: meP.img }, 34);
-      const peerAv = avatarHtml({ avatar: (peerProf && peerProf.avatar && !String(peerProf.avatar).startsWith('data:')) ? peerProf.avatar : '🎮', img: (peerProf && String(peerProf.avatar).startsWith('data:')) ? peerProf.avatar : '' }, 34);
-      list.innerHTML = rows.map((r) => {
+      const meAv = avatarHtml({ avatar: meP.avatar, img: meP.img }, 30);
+      const img = String((peerProf && peerProf.avatar) || '');
+      const peerAv = avatarHtml({ avatar: img.startsWith('data:') ? '🎮' : (img || '🎮'), img: img.startsWith('data:') ? img : '' }, 30);
+      const peerLabel = (peerProf && peerProf.name) || peerName || '对方';
+
+      list.innerHTML = rows.length ? rows.map((r) => {
         const mine = r.sender === me;
         const imgs = Array.isArray(r.images) ? r.images : [];
-        return '<div class="chat-msg ' + (mine ? 'mine' : '') + '">' +
-          '<div class="chat-av">' + (mine ? meAv : peerAv) + '</div>' +
-          '<div class="chat-main">' +
-          '<div class="chat-name">' + esc(mine ? (meP.name || '我') : ((peerProf && peerProf.name) || peerName || '对方')) + '</div>' +
-          (r.body ? '<div class="bubble">' + linkifyMentions(r.body) + '</div>' : '') +
-          (imgs.length ? '<div class="chat-pic">' + imgs.map((src) => '<img src="' + src + '">').join('') + '</div>' : '') +
-          '<div class="chat-time">' + timeAgo(r.created_at) + '</div>' +
+        return '<div class="msg ' + (mine ? 'mine' : '') + '">' +
+          '<div class="msg-av">' + (mine ? meAv : peerAv) + '</div>' +
+          '<div class="msg-body">' +
+            '<div class="msg-who">' + esc(mine ? (meP.name || '我') : peerLabel) + '</div>' +
+            (r.body ? '<div class="msg-bubble">' + linkifyMentions(r.body) + '</div>' : '') +
+            (imgs.length ? '<div class="msg-pics">' + imgs.map((src) => '<img src="' + src + '">').join('') + '</div>' : '') +
+            '<div class="msg-time">' + timeAgo(r.created_at) + '</div>' +
           '</div></div>';
-      }).join('') || '<div class="empty-state">还没有消息，打个招呼吧</div>';
+      }).join('') : '<div class="chat-empty">还没有消息，打个招呼吧 👋</div>';
       list.scrollTop = list.scrollHeight;
     } catch (e) {
-      list.innerHTML = '<div class="empty-state">读取失败：' + esc(e.message) + '<br><span style="font-size:12px;color:var(--text-4)">多半是 messages 表还没建</span></div>';
+      list.innerHTML = '<div class="chat-empty">读取失败：' + esc(e.message) + '<br><span style="font-size:12px;opacity:.7">多半是 messages 表还没建</span></div>';
     }
   };
 
@@ -1709,14 +1733,21 @@ export function openChat(peerEmail, peerName) {
     }
   };
 
+  const close = () => {
+    closed = true;
+    if (timer) clearInterval(timer);
+    box.classList.remove('chat-mode');
+    m.hidden = true;
+  };
+
   box.querySelector('#chatSend').onclick = send;
   box.querySelector('#chatInput').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
   box.querySelector('#chatEmoji').onclick = () => box.querySelector('#chatEmojiBox').classList.toggle('hidden');
   box.querySelector('#chatEmojiBox').onclick = (e) => {
-    const b = e.target.closest('[data-em]');
-    if (!b) return;
+    const btn = e.target.closest('[data-em]');
+    if (!btn) return;
     const input = box.querySelector('#chatInput');
-    input.value += b.dataset.em;
+    input.value += btn.dataset.em;
     input.focus();
   };
   box.querySelector('#chatPic').onclick = () => box.querySelector('#chatFile').click();
@@ -1728,81 +1759,13 @@ export function openChat(peerEmail, peerName) {
     renderImgs();
     e.target.value = '';
   };
-  const close = () => { closed = true; if (timer) clearInterval(timer); box.classList.remove('chat-mode'); m.hidden = true; };
+  box.querySelector('#chatClose').onclick = close;
   box.querySelector('#chatBack').onclick = () => { close(); openFriends(); };
 
-  const stateEl = box.querySelector('#chatState');
-  const paintPresence = async () => {
-    try {
-      const ps = await rest('/rest/v1/profiles?select=name,avatar,last_seen&user_email=eq.' + encodeURIComponent(peerEmail) + '&limit=1');
-      const p0 = ps && ps[0];
-      if (!p0) { stateEl.innerHTML = '<i class="dot off"></i>离线'; return; }
-      if (p0.avatar) box.querySelector('#chatPeerAv').innerHTML = avatarHtml({ avatar: String(p0.avatar).startsWith('data:') ? '🎮' : p0.avatar, img: String(p0.avatar).startsWith('data:') ? p0.avatar : '' }, 30);
-      const last = p0.last_seen ? new Date(p0.last_seen).getTime() : 0;
-      const mins = last ? Math.floor((Date.now() - last) / 60000) : null;
-      if (mins !== null && mins <= 3) stateEl.innerHTML = '<i class="dot"></i>在线';
-      else if (mins !== null) stateEl.innerHTML = '<i class="dot off"></i>' + (mins < 60 ? mins + ' 分钟前在线' : Math.floor(mins / 60) + ' 小时前在线');
-      else stateEl.innerHTML = '<i class="dot off"></i>离线';
-    } catch (e) {
-      stateEl.innerHTML = '<i class="dot off"></i>离线';
-    }
-  };
   paintPresence();
-  setInterval(() => { if (!closed) paintPresence(); }, 30000);
-  box.querySelector('#chatClose').onclick = close;
-
   load();
-  timer = setInterval(() => { if (!closed) load(); }, 4000);
+  timer = setInterval(() => { if (!closed) { load(); paintPresence(); } }, 5000);
 }
-
-
-/* 好友管理菜单 */
-function openFriendMenu(anchor, after) {
-  document.querySelectorAll('.cmt-menu').forEach((n) => n.remove());
-  const id = anchor.dataset.manage;
-  const em = anchor.dataset.em;
-  const nm = anchor.dataset.nm;
-  const rm = anchor.dataset.rm || '';
-  const star = anchor.dataset.star === '1';
-
-  const menu = document.createElement('div');
-  menu.className = 'cmt-menu';
-  menu.innerHTML = '<button data-act="remark">' + (rm ? '修改备注' : '设置备注') + '</button>' +
-    '<button data-act="star">' + (star ? '取消星标' : '设为星标') + '</button>' +
-    '<button data-act="del" class="danger">删除好友</button>';
-  document.body.appendChild(menu);
-  const r = anchor.getBoundingClientRect();
-  menu.style.left = Math.max(8, r.right - 140) + 'px';
-  menu.style.top = (r.bottom + 6) + 'px';
-  setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
-
-  menu.onclick = async (e) => {
-    const act = e.target.closest('[data-act]');
-    if (!act) return;
-    const kind = act.dataset.act;
-    menu.remove();
-    try {
-      if (kind === 'remark') {
-        const v = prompt('给 ' + nm + ' 设置备注名（留空取消）：', rm);
-        if (v === null) return;
-        await rest('/rest/v1/' + FR + '?id=eq.' + id, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: { remark: v.trim().slice(0, 16) } });
-        toast('备注已更新');
-      } else if (kind === 'star') {
-        await rest('/rest/v1/' + FR + '?id=eq.' + id, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: { starred: !star } });
-        toast(star ? '已取消星标' : '已设为星标');
-      } else if (kind === 'del') {
-        if (!confirm('确定删除好友「' + nm + '」？')) return;
-        await rest('/rest/v1/' + FR + '?id=eq.' + id, { method: 'DELETE' });
-        toast('已删除好友');
-      }
-      if (after) after();
-      paintFriendDot();
-    } catch (err) {
-      toast('操作失败：' + err.message);
-    }
-  };
-}
-
 
 /* ================= 图片灯箱 ================= */
 function openLightbox(src) {
