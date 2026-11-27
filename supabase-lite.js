@@ -99,3 +99,41 @@ export async function createComment({ postId, body }) {
     body: [{ post_id: postId, body, author_name: s.email.split('@')[0] }],
   });
 }
+
+// 点邮件链接回调：Supabase 会把 access_token / refresh_token 放在 URL hash 里
+export function captureHashSession() {
+  try {
+    const h = location.hash || '';
+    if (!h.includes('access_token=')) return false;
+    const p = new URLSearchParams(h.replace(/^#/, ''));
+    const access = p.get('access_token');
+    const refresh = p.get('refresh_token');
+    const expires = Number(p.get('expires_in') || 3600);
+    if (!access) return false;
+    saveSession({
+      access_token: access,
+      refresh_token: refresh,
+      expires_at: Date.now() + expires * 1000,
+      email: p.get('email') || null,
+      uid: null,
+    });
+    history.replaceState(null, '', location.pathname + location.search);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 用 access_token 反查邮箱（用来在顶栏显示昵称） */
+export async function fillEmailFromUser() {
+  const s = session();
+  if (!s || s.email || !s.access_token) return s;
+  try {
+    const data = await call('/auth/v1/user', { method: 'GET' });
+    if (data && data.email) {
+      s.email = data.email;
+      saveSession(s);
+    }
+  } catch {}
+  return session();
+}

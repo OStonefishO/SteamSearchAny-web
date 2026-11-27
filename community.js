@@ -1,5 +1,7 @@
 // 社区与登录界面（无框架，挂到主应用上）
-import { isConfigured, sendCode, verifyCode, logout, currentEmail, listPosts, createPost, listComments, createComment } from './supabase-lite.js';
+import { isConfigured, sendCode, verifyCode, logout, currentEmail, listPosts, createPost, listComments, createComment, captureHashSession, fillEmailFromUser } from './supabase-lite.js';
+
+try { if (captureHashSession()) fillEmailFromUser(); } catch {}
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const timeAgo = (iso) => {
@@ -60,7 +62,7 @@ export function openLogin() {
 
   box.innerHTML = `<div class="m-body" style="padding:24px">
     <h3>邮箱登录</h3>
-    <p style="color:var(--text-3);font-size:13px;margin:8px 0 14px">输入邮箱收验证码，不用设密码。</p>
+    <p style="color:var(--text-3);font-size:13px;margin:8px 0 14px">输入邮箱，会收到一封带登录链接的邮件 —— 在手机或电脑上点开就能登录（也可以把邮件里的 6 位码贴到下面）。</p>
     <input class="input" id="authEmail" type="email" placeholder="you@example.com" autocomplete="email">
     <button class="btn btn-primary btn-block" id="sendCode" style="margin-top:10px">发送验证码</button>
     <div id="codeBox" class="hidden" style="margin-top:14px">
@@ -78,7 +80,7 @@ export function openLogin() {
     try {
       await sendCode(em);
       box.querySelector('#codeBox').classList.remove('hidden');
-      msg.textContent = '验证码已发送，检查邮箱（含垃圾箱）';
+      msg.textContent = '邮件已发送，点里面的链接即可登录（或粘贴 6 位验证码）';
     } catch (e) {
       msg.textContent = '发送失败：' + e.message;
     }
