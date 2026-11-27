@@ -1400,6 +1400,10 @@ try {
   if (!bindBtn()) setTimeout(bindBtn, 600);
   setTimeout(() => { refreshNotifs().catch(() => {}); }, 1200);
   setTimeout(() => { syncProfile().then(() => refreshAuthButton()).catch(() => {}); }, 600);
+  setTimeout(() => {
+    const em = currentEmail();
+    if (em) rest('/rest/v1/profiles?user_email=eq.' + encodeURIComponent(em), { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: { last_seen: new Date().toISOString() } }).catch(() => {});
+  }, 1500);
 } catch (e) {}
 
 
@@ -1628,8 +1632,13 @@ export function openChat(peerEmail, peerName) {
     .then((r) => { peerProf = r && r[0]; }).catch(() => {});
 
   box.innerHTML = '<div class="m-body chat-body">' +
-    '<div class="chat-head"><b>' + esc(peerName || peerEmail) + '</b><span class="chat-sub">私聊</span>' +
-    '<button class="btn btn-sm" id="chatClose" style="margin-left:auto">关闭</button></div>' +
+    '<div class="chat-head">' +
+      '<button class="chat-back" id="chatBack" title="返回好友列表">←</button>' +
+      '<span id="chatPeerAv"></span>' +
+      '<div class="chat-id"><b>' + esc(peerName || peerEmail) + '</b>' +
+      '<span class="chat-state" id="chatState"><i class="dot"></i>读取中…</span></div>' +
+      '<button class="chat-x" id="chatClose" title="关闭">×</button>' +
+    '</div>' +
     '<div class="chat-list" id="chatList"><div class="empty-state"><span class="spin"></span></div></div>' +
     '<div class="chat-images" id="chatImgs"></div>' +
     '<div class="chat-compose">' +
@@ -1720,6 +1729,26 @@ export function openChat(peerEmail, peerName) {
     e.target.value = '';
   };
   const close = () => { closed = true; if (timer) clearInterval(timer); box.classList.remove('chat-mode'); m.hidden = true; };
+  box.querySelector('#chatBack').onclick = () => { close(); openFriends(); };
+
+  const stateEl = box.querySelector('#chatState');
+  const paintPresence = async () => {
+    try {
+      const ps = await rest('/rest/v1/profiles?select=name,avatar,last_seen&user_email=eq.' + encodeURIComponent(peerEmail) + '&limit=1');
+      const p0 = ps && ps[0];
+      if (!p0) { stateEl.innerHTML = '<i class="dot off"></i>离线'; return; }
+      if (p0.avatar) box.querySelector('#chatPeerAv').innerHTML = avatarHtml({ avatar: String(p0.avatar).startsWith('data:') ? '🎮' : p0.avatar, img: String(p0.avatar).startsWith('data:') ? p0.avatar : '' }, 30);
+      const last = p0.last_seen ? new Date(p0.last_seen).getTime() : 0;
+      const mins = last ? Math.floor((Date.now() - last) / 60000) : null;
+      if (mins !== null && mins <= 3) stateEl.innerHTML = '<i class="dot"></i>在线';
+      else if (mins !== null) stateEl.innerHTML = '<i class="dot off"></i>' + (mins < 60 ? mins + ' 分钟前在线' : Math.floor(mins / 60) + ' 小时前在线');
+      else stateEl.innerHTML = '<i class="dot off"></i>离线';
+    } catch (e) {
+      stateEl.innerHTML = '<i class="dot off"></i>离线';
+    }
+  };
+  paintPresence();
+  setInterval(() => { if (!closed) paintPresence(); }, 30000);
   box.querySelector('#chatClose').onclick = close;
 
   load();
