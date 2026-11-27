@@ -1,4 +1,4 @@
-// 社区/账号 v2：头像上传+缩放、作者主页、删帖子
+// 社区 v3：图片(≤9)、帖子详情页、分页(可配置)、点赞、删评论
 import { isConfigured, sendCode, verifyCode, logout, currentEmail, session, captureHashSession, fillEmailFromUser } from './supabase-lite.js';
 
 try {
@@ -15,23 +15,13 @@ const timeAgo = (iso) => {
   return `${Math.floor(d / 86400)} 天前`;
 };
 
-/* ---------- 资料（本地保存，随帖子上传快照） ---------- */
+/* ---------- 资料 ---------- */
 const PK = 'lh.profile';
 export function profile() {
   let p = {};
   try { p = JSON.parse(localStorage.getItem(PK) || '{}'); } catch {}
   const email = currentEmail() || '';
   let id = p.id;
-  // 支持用 ?uid=xxxx 认领一个固定 ID
-  try {
-    const q = new URLSearchParams(location.search).get('uid');
-    if (!id && q && /^[0-9]{10}$/.test(q)) {
-      id = Number(q);
-      p.id = id;
-      localStorage.setItem(PK, JSON.stringify(p));
-      history.replaceState(null, '', location.pathname);
-    }
-  } catch {}
   if (!id) {
     id = 1000000000 + Math.floor(Math.random() * 9000000000);
     try { p.id = id; localStorage.setItem(PK, JSON.stringify(p)); } catch {}
@@ -40,15 +30,14 @@ export function profile() {
 }
 function saveProfile(p) { try { localStorage.setItem(PK, JSON.stringify(p)); } catch {} }
 
-let DRAFT = null;   // 账号面板的临时编辑状态，跨弹窗保留
-
 const AVATARS = ['🎮', '🕹️', '👾', '🚀', '🌌', '🐱', '🦊', '🐳', '🌙', '⭐', '🔥', '🎧'];
 const COLORS = ['#45bdf7', '#b6e04a', '#ffb04d', '#f4736f', '#a78bfa', '#34d399', '#f472b6'];
+let DRAFT = null;
 
 function avatarHtml(p, size = 40) {
-  const base = `width:${size}px;height:${size}px;border-radius:${Math.round(size * 0.28)}px;display:grid;place-items:center;overflow:hidden;border:1px solid ${p.color}55;background:${p.color}1f;`;
+  const base = `width:${size}px;height:${size}px;border-radius:${Math.round(size * 0.28)}px;display:grid;place-items:center;overflow:hidden;border:1px solid ${p.color || '#45bdf7'}55;background:${p.color || '#45bdf7'}1f;flex:none;`;
   if (p.img) return `<span style="${base}"><img src="${p.img}" style="width:100%;height:100%;object-fit:cover"></span>`;
-  return `<span style="${base}font-size:${Math.round(size * 0.5)}px">${esc(p.avatar)}</span>`;
+  return `<span style="${base}font-size:${Math.round(size * 0.5)}px">${esc(p.avatar || '🎮')}</span>`;
 }
 
 /* ---------- REST ---------- */
@@ -71,12 +60,11 @@ async function rest(path, opts = {}) {
   return data;
 }
 
-/* ---------- 远端资料（跨设备同一 UID） ---------- */
+/* ---------- 远端资料 ---------- */
 async function apiGetProfile(email) {
   const rows = await rest('/rest/v1/profiles?select=user_email,uid,name,avatar,color&user_email=eq.' + encodeURIComponent(email) + '&limit=1');
   return rows && rows[0];
 }
-
 async function apiUpsertProfile(p) {
   const email = currentEmail();
   if (!email) return;
@@ -86,8 +74,6 @@ async function apiUpsertProfile(p) {
     body: [{ user_email: email, uid: p.id, name: p.name, avatar: p.img || p.avatar, color: p.color, updated_at: new Date().toISOString() }],
   });
 }
-
-/** 登录后同步：远端有就用远端，没有就把本地（或新生成）写上去 */
 export async function syncProfile() {
   const email = currentEmail();
   if (!email || !isConfigured()) return profile();
@@ -112,8 +98,6 @@ export async function syncProfile() {
     return profile();
   }
 }
-
-/* ---------- 把自己的历史帖子统一成最新资料 ---------- */
 async function refreshOwnPosts(p) {
   const email = currentEmail();
   if (!email) return;
@@ -126,14 +110,36 @@ async function refreshOwnPosts(p) {
   } catch {}
 }
 
-/* ---------- 头像上传（居中裁剪 + 缩放） ---------- */
+/* ---------- 图片压缩 ---------- */
+function compressImage(file, max = 1000, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      const im = new Image();
+      im.onload = () => {
+        let { width: w, height: h } = im;
+        const scale = Math.min(1, max / Math.max(w, h));
+        const cv = document.createElement('canvas');
+        cv.width = Math.round(w * scale);
+        cv.height = Math.round(h * scale);
+        cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+        resolve(cv.toDataURL('image/jpeg', quality));
+      };
+      im.onerror = reject;
+      im.src = String(fr.result);
+    };
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+}
+
+/* ---------- 头像裁剪 ---------- */
 function openAvatarEditor(file, onDone) {
   const m = document.getElementById('modal');
   const box = document.getElementById('modalContent');
   if (!m) return;
   const reader = new FileReader();
   reader.onload = () => {
-    const src = String(reader.result);
     m.hidden = false;
     box.innerHTML = `<div class="m-body">
       <h3>调整头像</h3>
@@ -143,8 +149,7 @@ function openAvatarEditor(file, onDone) {
       <div style="display:flex;gap:8px;margin-top:14px">
         <button class="btn btn-primary" id="cropOk" style="flex:1">用这张</button>
         <button class="btn" id="cropCancel">取消</button>
-      </div>
-    </div>`;
+      </div></div>`;
     const cv = box.querySelector('#cropCv');
     const ctx = cv.getContext('2d');
     const im = new Image();
@@ -152,17 +157,14 @@ function openAvatarEditor(file, onDone) {
       const draw = (zoom) => {
         const scale = zoom / 100;
         const side = Math.min(im.width, im.height) / scale;
-        const sx = (im.width - side) / 2;
-        const sy = (im.height - side) / 2;
         ctx.clearRect(0, 0, 260, 260);
-        ctx.drawImage(im, sx, sy, side, side, 0, 0, 260, 260);
+        ctx.drawImage(im, (im.width - side) / 2, (im.height - side) / 2, side, side, 0, 0, 260, 260);
       };
       draw(140);
       box.querySelector('#zoom').oninput = (e) => draw(Number(e.target.value));
       box.querySelector('#cropOk').onclick = () => {
         const out = document.createElement('canvas');
-        out.width = 96;
-        out.height = 96;
+        out.width = 96; out.height = 96;
         out.getContext('2d').drawImage(cv, 0, 0, 96, 96);
         onDone(out.toDataURL('image/jpeg', 0.82));
         m.hidden = true;
@@ -170,7 +172,7 @@ function openAvatarEditor(file, onDone) {
       };
       box.querySelector('#cropCancel').onclick = () => (m.hidden = true);
     };
-    im.src = src;
+    im.src = String(reader.result);
   };
   reader.readAsDataURL(file);
 }
@@ -184,10 +186,9 @@ export function openLogin() {
   const email = currentEmail();
 
   if (!isConfigured()) {
-    box.innerHTML = `<div class="m-body"><h3>还没有接后端</h3><p style="color:var(--text-3);font-size:13px;margin-top:8px">填好 public/config.js 即可启用。</p></div>`;
+    box.innerHTML = `<div class="m-body"><h3>还没有接后端</h3></div>`;
     return;
   }
-
   if (!email) {
     box.innerHTML = `<div class="m-body"><h3>邮箱登录</h3>
       <p style="color:var(--text-3);font-size:13px;margin:8px 0 14px">输入邮箱，会收到一封带登录链接的邮件。</p>
@@ -209,7 +210,6 @@ export function openLogin() {
     box.querySelector('#doVerify').onclick = async () => {
       const code = box.querySelector('#authCode').value.trim();
       if (!code) return (msg.textContent = '请填验证码');
-      msg.textContent = '验证中…';
       try { await verifyCode(box.querySelector('#authEmail').value.trim(), code); m.hidden = true; location.reload(); }
       catch (e) { msg.textContent = '失败：' + e.message; }
     };
@@ -218,40 +218,23 @@ export function openLogin() {
 
   DRAFT = DRAFT || { ...profile() };
   const p = DRAFT;
-  if (!window.__profileSynced) {
-    window.__profileSynced = true;
-    syncProfile().then(() => { DRAFT = null; refreshAuthButton(); }).catch(() => {});
-  }
   box.innerHTML = `<div class="m-body">
     <h3>我的账号</h3>
-    <div class="profile-head">
-      <span id="avatarPreview">${avatarHtml(p, 56)}</span>
-      <div>
-        <div class="profile-name">${esc(p.name)}</div>
-        <div class="profile-mail">${esc(email)} · UID #${p.id}</div>
-      </div>
-    </div>
-
+    <div class="profile-head"><span id="avatarPreview">${avatarHtml(p, 56)}</span>
+      <div><div class="profile-name">${esc(p.name)}</div>
+      <div class="profile-mail">${esc(email)} · UID #${p.id}</div></div></div>
     <label class="field-label">昵称</label>
     <input class="input" id="pName" maxlength="16" value="${esc(p.name)}">
-
     <label class="field-label">上传头像（可缩放）</label>
     <div style="display:flex;gap:8px;align-items:center">
       <button class="btn" id="uploadBtn">选择图片</button>
       <button class="btn" id="clearImg">用 emoji</button>
       <input type="file" id="fileIn" accept="image/*" class="hidden">
     </div>
-
     <label class="field-label">或选一个 emoji</label>
-    <div class="picker" id="pAvatars">
-      ${AVATARS.map((a) => `<button class="pick ${a === p.avatar && !p.img ? 'on' : ''}" data-av="${a}">${a}</button>`).join('')}
-    </div>
-
+    <div class="picker" id="pAvatars">${AVATARS.map((a) => `<button class="pick ${a === p.avatar && !p.img ? 'on' : ''}" data-av="${a}">${a}</button>`).join('')}</div>
     <label class="field-label">主题色</label>
-    <div class="picker" id="pColors">
-      ${COLORS.map((c) => `<button class="pick-dot ${c === p.color ? 'on' : ''}" data-c="${c}" style="background:${c}"></button>`).join('')}
-    </div>
-
+    <div class="picker" id="pColors">${COLORS.map((c) => `<button class="pick-dot ${c === p.color ? 'on' : ''}" data-c="${c}" style="background:${c}"></button>`).join('')}</div>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" id="pSave" style="flex:1">保存资料</button>
       <button class="btn" id="doLogout">退出登录</button>
@@ -259,7 +242,6 @@ export function openLogin() {
 
   const draft = DRAFT;
   const preview = () => { const el = box.querySelector('#avatarPreview'); if (el) el.innerHTML = avatarHtml(draft, 56); };
-
   box.querySelector('#uploadBtn').onclick = () => box.querySelector('#fileIn').click();
   box.querySelector('#fileIn').onchange = (e) => {
     const f = e.target.files && e.target.files[0];
@@ -269,8 +251,7 @@ export function openLogin() {
   box.querySelector('#pAvatars').onclick = (e) => {
     const b = e.target.closest('[data-av]');
     if (!b) return;
-    draft.avatar = b.dataset.av;
-    draft.img = '';
+    draft.avatar = b.dataset.av; draft.img = '';
     box.querySelectorAll('#pAvatars .pick').forEach((x) => x.classList.toggle('on', x.dataset.av === draft.avatar));
     preview();
   };
@@ -290,7 +271,6 @@ export function openLogin() {
     m.hidden = true;
     refreshAuthButton();
     toast('资料已保存');
-    if (window.LH_COMMUNITY_REFRESH) window.LH_COMMUNITY_REFRESH();
   };
   box.querySelector('#doLogout').onclick = () => { DRAFT = null; logout(); m.hidden = true; location.reload(); };
 }
@@ -316,27 +296,31 @@ export async function openComposer(game) {
   const p = profile();
   box.innerHTML = `<div class="m-body">
     <h3>发帖</h3>
-    <div class="profile-head" style="margin-bottom:12px">
-      ${avatarHtml(p, 40)}
+    <div class="profile-head" style="margin-bottom:12px">${avatarHtml(p, 40)}
       <div><div class="profile-name">${esc(p.name || '我')}</div>
-      <div class="profile-mail">${game ? esc(game.name) : '自由分享'}</div></div>
-    </div>
+      <div class="profile-mail">${game ? esc(game.name) : '自由分享'}</div></div></div>
     <input class="input" id="postTitle" maxlength="40" placeholder="标题（一句话说明你想聊什么）">
     ${game ? '' : '<div style="position:relative;margin-top:8px"><input class="input" id="postGame" placeholder="关联游戏（输入名字搜索）" autocomplete="off"><div id="gameSug" class="sugbox hidden"></div></div><div id="gamePicked" class="pickedwrap"></div>'}
     <textarea class="input" id="postBody" rows="5" placeholder="正文：说说这游戏怎么样？值得入吗？" style="margin-top:8px"></textarea>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+      <button class="btn" id="pickImgs">＋ 图片（最多 9 张）</button>
+      <span id="imgCount" style="font-size:12px;color:var(--text-4)">0/9</span>
+      <input type="file" id="imgIn" accept="image/*" multiple class="hidden">
+    </div>
+    <div id="imgPreview" class="imgprev"></div>
     <button class="btn btn-primary btn-block" id="doPost" style="margin-top:10px">发布</button>
     <p id="postMsg" style="font-size:12px;color:var(--text-4);margin-top:8px"></p></div>`;
+
   const msg = box.querySelector('#postMsg');
   let picked = game ? { id: game.id, name: game.name } : null;
+  let images = [];
 
   const gi = box.querySelector('#postGame');
   const sug = box.querySelector('#gameSug');
   const pickedBox = box.querySelector('#gamePicked');
   const renderPicked = () => {
     if (!pickedBox) return;
-    pickedBox.innerHTML = picked
-      ? '<span class="picked">已关联：' + picked.name + ' <b data-clear="1">×</b></span>'
-      : '';
+    pickedBox.innerHTML = picked ? '<span class="picked">已关联：' + esc(picked.name) + ' <b data-clear="1">×</b></span>' : '';
     const clr = pickedBox.querySelector('[data-clear]');
     if (clr) clr.onclick = () => { picked = null; renderPicked(); };
   };
@@ -347,16 +331,15 @@ export async function openComposer(game) {
     gi.oninput = () => {
       const q = gi.value.trim();
       clearTimeout(timer);
-      if (q.length < 1) { sug.classList.add('hidden'); return; }
+      if (!q) { sug.classList.add('hidden'); return; }
       timer = setTimeout(async () => {
         try {
           const res = await fetch(new URL('api/search?q=' + encodeURIComponent(q), document.baseURI).href);
           const data = await res.json();
           const items = (data.items || []).slice(0, 6);
-          if (!items.length) { sug.innerHTML = '<div class="sug-empty">没找到</div>'; }
-          else {
-            sug.innerHTML = items.map((g) => '<div data-gid="' + g.id + '" data-gname="' + esc(g.name) + '">' + esc(g.name) + '<small>' + (g.year || '') + '</small></div>').join('');
-          }
+          sug.innerHTML = items.length
+            ? items.map((g) => '<div data-gid="' + g.id + '" data-gname="' + esc(g.name) + '">' + esc(g.name) + '<small>' + (g.year || '') + '</small></div>').join('')
+            : '<div class="sug-empty">没找到</div>';
           sug.classList.remove('hidden');
         } catch { sug.classList.add('hidden'); }
       }, 180);
@@ -371,20 +354,38 @@ export async function openComposer(game) {
     };
   }
 
+  const renderImgs = () => {
+    box.querySelector('#imgCount').textContent = images.length + '/9';
+    box.querySelector('#imgPreview').innerHTML = images
+      .map((src, i) => `<span class="thumb"><img src="${src}"><b data-rm="${i}">×</b></span>`)
+      .join('');
+    box.querySelectorAll('[data-rm]').forEach((b) => {
+      b.onclick = () => { images.splice(Number(b.dataset.rm), 1); renderImgs(); };
+    });
+  };
+  box.querySelector('#pickImgs').onclick = () => box.querySelector('#imgIn').click();
+  box.querySelector('#imgIn').onchange = async (e) => {
+    const files = [...(e.target.files || [])].slice(0, 9 - images.length);
+    for (const f of files) {
+      try { images.push(await compressImage(f)); } catch {}
+    }
+    renderImgs();
+    e.target.value = '';
+  };
+
   box.querySelector('#doPost').onclick = async () => {
     const body = box.querySelector('#postBody').value.trim();
     const title = (box.querySelector('#postTitle').value || '').trim().slice(0, 40);
     if (!title) return (msg.textContent = '给帖子起个标题吧');
     if (!body) return (msg.textContent = '写点正文吧');
-    const gname = picked ? picked.name : '闲聊';
     msg.textContent = '发布中…';
     try {
       await rest('/rest/v1/posts', {
         method: 'POST',
         headers: { Prefer: 'return=representation' },
         body: [{
-          title, game_id: picked ? picked.id : 0, game_name: gname, body,
-          author_name: p.name, author_id: p.id, author_avatar: p.img || p.avatar, author_email: currentEmail(),
+          title, game_id: picked ? picked.id : 0, game_name: picked ? picked.name : '闲聊', body,
+          images, author_name: p.name, author_id: p.id, author_avatar: p.img || p.avatar, author_email: currentEmail(),
         }],
       });
       m.hidden = true;
@@ -396,7 +397,7 @@ export async function openComposer(game) {
   };
 }
 
-/* ---------- 某位用户的资料页 ---------- */
+/* ---------- 作者主页 ---------- */
 export async function openAuthor(name, uid) {
   const m = document.getElementById('modal');
   const box = document.getElementById('modalContent');
@@ -406,16 +407,14 @@ export async function openAuthor(name, uid) {
   try {
     const filter = uid ? `author_id=eq.${uid}` : `author_name=eq.${encodeURIComponent(name)}`;
     const rows = await rest(`/rest/v1/posts?select=id,title,game_name,body,author_avatar,author_id,created_at&` + filter + `&order=created_at.desc&limit=20`);
-    const p0 = { name, avatar: rows[0]?.author_avatar || '🎮', img: (rows[0]?.author_avatar || '').startsWith('data:') ? rows[0].author_avatar : '', color: '#45bdf7' };
+    const av = rows[0]?.author_avatar || '🎮';
     box.innerHTML = `<div class="m-body">
-      <div class="profile-head">${avatarHtml(p0, 56)}
+      <div class="profile-head">${avatarHtml({ avatar: av.startsWith('data:') ? '🎮' : av, img: av.startsWith('data:') ? av : '' }, 56)}
         <div><div class="profile-name">${esc(name)}<span class="post-uid">#${uid || (rows[0] && rows[0].author_id) || '----'}</span></div>
-        <div class="profile-mail">${rows.length} 篇帖子</div></div>
-      </div>
+        <div class="profile-mail">${rows.length} 篇帖子</div></div></div>
       ${rows.map((x) => `<div class="author-post"><b>${esc(x.title || '无标题')}</b>
         <div class="post-meta">${esc(x.game_name)} · ${timeAgo(x.created_at)}</div>
-        <p class="post-body" style="margin:6px 0 0">${esc(x.body)}</p></div>`).join('')}
-    </div>`;
+        <p class="post-body" style="margin:6px 0 0">${esc(x.body)}</p></div>`).join('')}</div>`;
   } catch (e) {
     box.innerHTML = `<div class="m-body"><h3>${esc(name)}</h3><p style="color:var(--text-3)">读取失败：${esc(e.message)}</p></div>`;
   }
@@ -423,108 +422,214 @@ export async function openAuthor(name, uid) {
 
 function toast(t) { if (window.LH_TOAST) return window.LH_TOAST(t); }
 
-/* ---------- 社区列表 ---------- */
+/* ---------- 社区 ---------- */
+const PAGE_KEY = 'lh.pageSize';
+function pageSize() { return Number(localStorage.getItem(PAGE_KEY) || 10); }
+let PAGE = 0;
+let VIEW = 'list';
+let CUR = null;
+
 export async function renderCommunity(root) {
   if (!isConfigured()) {
     root.innerHTML = `<div class="empty-state"><span class="big">🧩</span>社区还没接后端。</div>`;
     return;
   }
-  const me = profile();
+  if (VIEW === 'detail' && CUR) return renderDetail(root);
+  await renderList(root);
+}
+
+async function renderList(root) {
+  const size = pageSize();
   root.innerHTML = `<div class="cmt-bar">
       <button class="btn btn-primary" id="newPost">＋ 发帖</button>
       <button class="btn" id="myProfile">我的资料</button>
-      <span class="cmt-hint">${currentEmail() ? '点作者名字可看他的主页' : '登录后可发帖、评论、删自己的帖'}</span>
-    </div><div id="postList"><div class="empty-state"><span class="spin"></span></div></div>`;
+      <span class="cmt-hint">点帖子进入详情，可看图与评论</span>
+      <span class="page-set">每页
+        <select id="pageSizeSel" class="input sm" style="width:auto;display:inline-block">
+          ${[10, 20, 30, 50].map((n) => `<option value="${n}" ${n === size ? 'selected' : ''}>${n}</option>`).join('')}
+        </select> 条
+      </span>
+    </div><div id="postList"><div class="empty-state"><span class="spin"></span></div></div>
+    <div class="pager"><button class="btn btn-sm" id="prevPage">上一页</button><span id="pageInfo"></span><button class="btn btn-sm" id="nextPage">下一页</button></div>`;
+
   root.querySelector('#newPost').onclick = () => (currentEmail() ? openComposer(null) : openLogin());
   root.querySelector('#myProfile').onclick = () => openLogin();
+  root.querySelector('#pageSizeSel').onchange = (e) => {
+    localStorage.setItem(PAGE_KEY, e.target.value);
+    PAGE = 0;
+    renderList(root);
+  };
 
   const list = root.querySelector('#postList');
   let posts = [];
   try {
-    posts = await rest('/rest/v1/posts?select=id,title,game_id,game_name,body,author_name,author_id,author_avatar,author_email,created_at&order=created_at.desc&limit=30') || [];
+    posts = await rest(`/rest/v1/posts?select=id,title,game_id,game_name,body,images,author_name,author_id,author_avatar,author_email,created_at&order=created_at.desc&limit=${size}&offset=${PAGE * size}`) || [];
   } catch (e) {
     list.innerHTML = `<div class="empty-state">读取失败：${esc(e.message)}</div>`;
     return;
   }
-  // 自愈：把属于自己但缺 author_id 的老帖补齐（只跑一次）
+
   const email = currentEmail();
   if (email && !window.__uidBackfilled) {
     const p = profile();
-    const need = posts.filter((x) => x.author_email === email && (!x.author_id || Number(x.author_id) !== p.id));
+    const need = posts.filter((x) => ((x.author_email === email) || (!x.author_email && x.author_name === p.name)) && (!x.author_id || Number(x.author_id) !== p.id));
     if (need.length) {
       window.__uidBackfilled = true;
-      await Promise.all(
-        need.map((x) =>
-          rest('/rest/v1/posts?id=eq.' + x.id, {
-            method: 'PATCH',
-            headers: { Prefer: 'return=minimal' },
-            body: { author_id: p.id, author_name: p.name, author_avatar: p.img || p.avatar },
-          }).catch(() => {})
-        )
-      );
-      return renderCommunity(root);
+      await Promise.all(need.map((x) => rest('/rest/v1/posts?id=eq.' + x.id, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: { author_id: p.id, author_name: p.name, author_email: email, author_avatar: p.img || p.avatar } }).catch(() => {})));
+      return renderList(root);
     }
   }
 
+  root.querySelector('#pageInfo').textContent = `第 ${PAGE + 1} 页`;
+  root.querySelector('#prevPage').disabled = PAGE === 0;
+  root.querySelector('#prevPage').onclick = () => { if (PAGE > 0) { PAGE -= 1; renderList(root); } };
+  root.querySelector('#nextPage').disabled = posts.length < size;
+  root.querySelector('#nextPage').onclick = () => { if (posts.length === size) { PAGE += 1; renderList(root); } };
+
   if (!posts.length) {
-    list.innerHTML = `<div class="empty-state"><span class="big">🌱</span>还没有人发帖。<br><span style="font-size:12px;color:var(--text-4)">点「＋ 发帖」写第一条</span></div>`;
+    list.innerHTML = `<div class="empty-state"><span class="big">🌱</span>${PAGE === 0 ? '还没有人发帖。点「＋ 发帖」写第一条' : '这一页没有内容了'}</div>`;
     return;
   }
 
-  const cRows = await rest(`/rest/v1/comments?select=id,post_id,body,author_name,created_at&post_id=in.(${posts.map((x) => x.id).join(',')})&order=created_at.asc`).catch(() => []);
-  const byPost = new Map();
-  for (const c of cRows || []) {
-    if (!byPost.has(c.post_id)) byPost.set(c.post_id, []);
-    byPost.get(c.post_id).push(c);
+  const ids = posts.map((x) => x.id).join(',');
+  const likes = await rest(`/rest/v1/post_likes?select=post_id,user_email&post_id=in.(${ids})`).catch(() => []);
+  const likeCount = new Map();
+  const mine = new Set();
+  for (const l of likes || []) {
+    likeCount.set(l.post_id, (likeCount.get(l.post_id) || 0) + 1);
+    if (email && l.user_email === email) mine.add(l.post_id);
   }
 
   list.innerHTML = posts.map((x) => {
-    const mine = currentEmail() && (x.author_email === currentEmail() || (!x.author_email && x.author_name === profile().name));
-    const av = { name: x.author_name, avatar: (x.author_avatar || '').startsWith('data:') ? '' : (x.author_avatar || '🎮'), img: (x.author_avatar || '').startsWith('data:') ? x.author_avatar : '', color: '#45bdf7' };
-    const cs = byPost.get(x.id) || [];
-    return `<article class="post">
-      <header>
-        ${avatarHtml(av, 26)}
-        <a class="post-author" data-author="${esc(x.author_name)}" data-aid="${x.author_id || ''}">${esc(x.author_name)}<span class="post-uid">#${x.author_id || '----'}</span></a>
-        ${x.game_id ? `<a class="post-game" href="?info=${x.game_id}">${esc(x.game_name)}</a>` : `<span class="post-game plain">${esc(x.game_name)}</span>`}
-        <span class="post-meta">${timeAgo(x.created_at)}</span>
-        ${mine ? `<button class="post-del" data-del="${x.id}">删除</button>` : ''}
+    const av = avatarOf(x);
+    const n = likeCount.get(x.id) || 0;
+    const liked = mine.has(x.id);
+    const imgs = Array.isArray(x.images) ? x.images : [];
+    return `<article class="post post-clickable" data-open="${x.id}">
+      <header>${avatarHtml(av, 26)}
+        ${x.game_id ? `<a class="post-game" href="?info=${x.game_id}" data-noclick="1">${esc(x.game_name)}</a>` : `<span class="post-game plain">${esc(x.game_name)}</span>`}
+        <span class="post-meta">${esc(x.author_name)} · ${timeAgo(x.created_at)}</span>
       </header>
       ${x.title ? `<h4 class="post-title">${esc(x.title)}</h4>` : ''}
-      <p class="post-body">${esc(x.body)}</p>
-      <div class="post-comments">
-        ${cs.map((c) => `<div class="cmt"><b>${esc(c.author_name)}</b> ${esc(c.body)}</div>`).join('')}
-        <div class="cmt-add">
-          <input class="input sm" data-cmt-input="${x.id}" placeholder="评论两句…">
-          <button class="btn btn-sm" data-cmt-send="${x.id}">发送</button>
-        </div>
+      <p class="post-body">${esc(x.body).slice(0, 160)}${x.body.length > 160 ? '…' : ''}</p>
+      ${imgs.length ? `<div class="imgs">${imgs.slice(0, 4).map((src) => `<img src="${src}">`).join('')}${imgs.length > 4 ? `<span class="more-img">+${imgs.length - 4}</span>` : ''}</div>` : ''}
+      <div class="post-foot">
+        <button class="like ${liked ? 'on' : ''}" data-like="${x.id}">${liked ? '♥' : '♡'} ${n || ''}</button>
+        <span class="cmt-n">评论</span>
       </div>
     </article>`;
   }).join('');
 
-  list.querySelectorAll('[data-author]').forEach((a) => { a.onclick = () => openAuthor(a.dataset.author, a.dataset.aid); });
-  list.querySelectorAll('[data-del]').forEach((b) => {
-    b.onclick = async () => {
-      if (!confirm('删除这条帖子？')) return;
-      try {
-        await rest(`/rest/v1/posts?id=eq.${b.dataset.del}`, { method: 'DELETE' });
-        toast('已删除');
-        renderCommunity(root);
-      } catch (e) { toast('删除失败：' + e.message); }
+  list.querySelectorAll('[data-open]').forEach((el) => {
+    el.onclick = (ev) => {
+      if (ev.target.closest('[data-noclick]')) return;
+      if (ev.target.closest('[data-like]')) return;
+      const id = Number(el.dataset.open);
+      CUR = posts.find((p) => p.id === id);
+      VIEW = 'detail';
+      renderCommunity(root);
     };
   });
-  list.querySelectorAll('[data-cmt-send]').forEach((btn) => {
-    btn.onclick = async () => {
+
+  list.querySelectorAll('[data-like]').forEach((btn) => {
+    btn.onclick = async (ev) => {
+      ev.stopPropagation();
       if (!currentEmail()) return openLogin();
-      const id = Number(btn.dataset.cmtSend);
-      const input = list.querySelector(`[data-cmt-input="${id}"]`);
-      const body = input.value.trim();
-      if (!body) return;
+      const id = Number(btn.dataset.like);
+      const on = btn.classList.contains('on');
       btn.disabled = true;
       try {
-        await rest('/rest/v1/comments', { method: 'POST', body: [{ post_id: id, body, author_name: me.name, author_email: currentEmail() }] });
-        renderCommunity(root);
-      } catch (e) { toast('评论失败'); btn.disabled = false; }
+        if (on) await rest(`/rest/v1/post_likes?post_id=eq.${id}&user_email=eq.${encodeURIComponent(currentEmail())}`, { method: 'DELETE' });
+        else await rest('/rest/v1/post_likes', { method: 'POST', body: [{ post_id: id, user_email: currentEmail() }] });
+        renderList(root);
+      } catch (e) {
+        toast('操作失败：' + e.message);
+        btn.disabled = false;
+      }
     };
   });
+}
+
+function avatarOf(x) {
+  const a = x.author_avatar || '';
+  return a.startsWith('data:') ? { avatar: '🎮', img: a } : { avatar: a || '🎮', img: '' };
+}
+
+async function renderDetail(root) {
+  const x = CUR;
+  if (!x) { VIEW = 'list'; return renderList(root); }
+  const av = avatarOf(x);
+  const imgs = Array.isArray(x.images) ? x.images : [];
+  root.innerHTML = `<div class="cmt-bar">
+      <button class="btn" id="backBtn">← 返回社区</button>
+    </div>
+    <article class="post">
+      <header>${avatarHtml(av, 34)}
+        <a class="post-author" data-author="${esc(x.author_name)}" data-aid="${x.author_id || ''}">${esc(x.author_name)}<span class="post-uid">#${x.author_id || '----'}</span></a>
+        ${x.game_id ? `<a class="post-game" href="?info=${x.game_id}">${esc(x.game_name)}</a>` : `<span class="post-game plain">${esc(x.game_name)}</span>`}
+        <span class="post-meta">${timeAgo(x.created_at)}</span>
+      </header>
+      ${x.title ? `<h4 class="post-title" style="font-size:18px">${esc(x.title)}</h4>` : ''}
+      <p class="post-body" style="font-size:14px">${esc(x.body)}</p>
+      ${imgs.length ? `<div class="detail-imgs">${imgs.map((s) => `<img src="${s}" loading="lazy">`).join('')}</div>` : ''}
+      <div class="post-foot"><span class="cmt-n">加载评论中…</span><span id="likeSlot"></span></div>
+      <div id="cmtList" class="post-comments"></div>
+      <div class="cmt-add">
+        <input class="input sm" id="cmtInput" placeholder="评论两句…">
+        <button class="btn btn-sm" id="cmtSend">发送</button>
+      </div>
+    </article>`;
+
+  root.querySelector('#backBtn').onclick = () => { VIEW = 'list'; CUR = null; renderCommunity(root); };
+  root.querySelector('[data-author]').onclick = () => openAuthor(x.author_name, x.author_id);
+
+  // 点赞
+  try {
+    const ls = await rest(`/rest/v1/post_likes?select=user_email&post_id=eq.${x.id}`) || [];
+    const email = currentEmail();
+    const liked = email && ls.some((l) => l.user_email === email);
+    root.querySelector('#likeSlot').innerHTML = `<button class="like ${liked ? 'on' : ''}" id="detailLike">${liked ? '♥' : '♡'} ${ls.length || ''}</button>`;
+    root.querySelector('#detailLike').onclick = async (ev) => {
+      if (!email) return openLogin();
+      const btn = ev.currentTarget;
+      btn.disabled = true;
+      try {
+        if (liked) await rest(`/rest/v1/post_likes?post_id=eq.${x.id}&user_email=eq.${encodeURIComponent(email)}`, { method: 'DELETE' });
+        else await rest('/rest/v1/post_likes', { method: 'POST', body: [{ post_id: x.id, user_email: email }] });
+        renderDetail(root);
+      } catch (e) { toast('失败'); btn.disabled = false; }
+    };
+  } catch {}
+
+  // 评论
+  const cmtList = root.querySelector('#cmtList');
+  try {
+    const cs = await rest(`/rest/v1/comments?select=id,body,author_name,author_email,created_at&post_id=eq.${x.id}&order=created_at.asc`) || [];
+    cmtList.innerHTML = cs.map((c) => {
+      const canDel = currentEmail() && c.author_email === currentEmail();
+      return `<div class="cmt">
+        <b>${esc(c.author_name)}</b> ${esc(c.body)}
+        <span class="cmt-time">${timeAgo(c.created_at)}</span>
+        ${canDel ? `<button class="cmt-del" data-delc="${c.id}">删除</button>` : ''}
+      </div>`;
+    }).join('') || '<div class="cmt" style="color:var(--text-4)">还没有评论</div>';
+    cmtList.querySelectorAll('[data-delc]').forEach((b) => {
+      b.onclick = async () => {
+        if (!confirm('删除这条评论？')) return;
+        try { await rest(`/rest/v1/comments?id=eq.${b.dataset.delc}`, { method: 'DELETE' }); renderDetail(root); }
+        catch (e) { toast('删除失败：' + e.message); }
+      };
+    });
+    root.querySelector('#cmtSend').onclick = async () => {
+      if (!currentEmail()) return openLogin();
+      const v = root.querySelector('#cmtInput').value.trim();
+      if (!v) return;
+      try {
+        await rest('/rest/v1/comments', { method: 'POST', body: [{ post_id: x.id, body: v, author_name: profile().name, author_email: currentEmail() }] });
+        renderDetail(root);
+      } catch (e) { toast('评论失败'); }
+    };
+  } catch (e) {
+    cmtList.innerHTML = `<div class="cmt">评论读取失败：${esc(e.message)}</div>`;
+  }
 }
