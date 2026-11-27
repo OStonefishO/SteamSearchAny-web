@@ -768,3 +768,5 @@ textarea.input { resize: vertical; min-height: 96px; }
 .post-del:hover { color:#f4736f; border-color:#7a2733 }
 .author-post { padding:10px 0; border-bottom:1px solid var(--line) }
 .author-post b { font-size:14px }
+
+.post-uid { font-size:10.5px; color:var(--text-4); margin-left:5px; font-weight:400; letter-spacing:.02em }
