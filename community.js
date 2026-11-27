@@ -1663,13 +1663,20 @@ export function openChat(peerEmail, peerName) {
       const rows = await rest('/rest/v1/messages?select=id,sender,receiver,body,images,created_at&or=(and(sender.eq.' + encodeURIComponent(me) + ',receiver.eq.' + encodeURIComponent(peerEmail) + '),and(sender.eq.' + encodeURIComponent(peerEmail) + ',receiver.eq.' + encodeURIComponent(me) + '))&order=created_at.asc&limit=200') || [];
       if (rows.length === lastCount) return;
       lastCount = rows.length;
+      const meP = profile();
+      const meAv = avatarHtml({ avatar: meP.avatar, img: meP.img }, 34);
+      const peerAv = avatarHtml({ avatar: (peerProf && peerProf.avatar && !String(peerProf.avatar).startsWith('data:')) ? peerProf.avatar : '🎮', img: (peerProf && String(peerProf.avatar).startsWith('data:')) ? peerProf.avatar : '' }, 34);
       list.innerHTML = rows.map((r) => {
         const mine = r.sender === me;
         const imgs = Array.isArray(r.images) ? r.images : [];
         return '<div class="chat-msg ' + (mine ? 'mine' : '') + '">' +
+          '<div class="chat-av">' + (mine ? meAv : peerAv) + '</div>' +
+          '<div class="chat-main">' +
+          '<div class="chat-name">' + esc(mine ? (meP.name || '我') : ((peerProf && peerProf.name) || peerName || '对方')) + '</div>' +
           (r.body ? '<div class="bubble">' + linkifyMentions(r.body) + '</div>' : '') +
           (imgs.length ? '<div class="chat-pic">' + imgs.map((src) => '<img src="' + src + '">').join('') + '</div>' : '') +
-          '<div class="chat-time">' + timeAgo(r.created_at) + '</div></div>';
+          '<div class="chat-time">' + timeAgo(r.created_at) + '</div>' +
+          '</div></div>';
       }).join('') || '<div class="empty-state">还没有消息，打个招呼吧</div>';
       list.scrollTop = list.scrollHeight;
     } catch (e) {
