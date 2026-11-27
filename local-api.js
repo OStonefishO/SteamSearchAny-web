@@ -604,6 +604,15 @@
       });
       return jsonResponse({ ...out, unresolved });
     }
+    if (tail === 'byids') {
+      const ids = (q.get('ids') || '')
+        .split(',')
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0)
+        .slice(0, 400);
+      const items = ids.map((id) => S.byId.get(id)).filter(Boolean).map(decorate);
+      return jsonResponse({ ok: true, items });
+    }
     if (tail === 'game') {
       const id = Number(path[1]);
       const g = S.byId.get(id);

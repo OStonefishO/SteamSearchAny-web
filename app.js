@@ -780,7 +780,12 @@ function switchView(view) {
   $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === view));
   $('#view-random').classList.toggle('hidden', view !== 'random');
   $('#view-similar').classList.toggle('hidden', view !== 'similar');
+  $('#view-events')?.classList.toggle('hidden', view !== 'events');
   if (view === 'similar') setTimeout(() => $('#seedInput')?.focus(), 60);
+  if (view === 'events' && !state.eventsLoaded) {
+    state.eventsLoaded = true;
+    renderEvents();
+  }
 }
 
 function syncUrl() {
@@ -933,6 +938,95 @@ function bindTip() {
   window.addEventListener('resize', hideTip);
 }
 
+// ---------------- Steam 现场 ----------------
+let eventIndex = new Map();
+
+function eventCard(g, deal) {
+  const rev = g.rev ?? { total: 0, pct: 0 };
+  const price = deal?.final != null ? `¥${(deal.final / 100).toFixed(0)}` : g.price || null;
+  return `<article class="card" data-eid="${g.id}" tabindex="0">
+    <div class="card-media">
+      ${imgTag(g.cover || CDN(g.id, 'cover'), g.name, g.id)}
+      ${deal?.discount ? `<span class="card-pill deal">-${deal.discount}%</span>` : ''}
+      ${rev.total ? `<span class="card-pill left ${pctClass(rev.pct)}">${rev.pct}%</span>` : '<span class="card-pill left">无评测</span>'}
+      <span class="card-pill right">冷门 ${g.gem ?? 0}</span>
+      <div class="card-foot">
+        <div class="card-title">${esc(g.name)}</div>
+        <div class="card-sub">${[g.year, price, rev.total ? `${shortNum(rev.total)} 评` : null].filter(Boolean).join(' · ')}</div>
+      </div>
+    </div>
+  </article>`;
+}
+
+async function renderEvents() {
+  const box = $('#eventsBody');
+  box.innerHTML = `<div class="empty-state"><span class="big">📡</span>正在读取 Steam 现场…</div>`;
+
+  let ev = null;
+  try {
+    const res = await fetch(new URL('data/events.json', document.baseURI).href, { cache: 'no-store' });
+    if (res.ok) ev = await res.json();
+  } catch {
+    /* 本地开发没有这个文件 */
+  }
+
+  if (!ev?.sections) {
+    box.innerHTML = `<div class="empty-state"><span class="big">📭</span>还没有现场数据 —— 云端每天抓一次，明天再看；<br>
+      <span style="font-size:12px;color:var(--text-4)">本地开发时这里为空是正常的</span></div>`;
+    return;
+  }
+
+  const allIds = new Set();
+  for (const list of Object.values(ev.sections)) for (const it of list || []) allIds.add(it.id);
+  for (const it of ev.sales || []) allIds.add(it.id);
+
+  let lib = [];
+  try {
+    const data = await api(`/api/byids?ids=${[...allIds].join(',')}`);
+    lib = data.items ?? [];
+  } catch {}
+  eventIndex = new Map(lib.map((g) => [g.id, g]));
+
+  const deals = new Map();
+  for (const it of ev.sections.specials || []) deals.set(it.id, it);
+  for (const it of ev.sections.newReleases || []) deals.set(it.id, it);
+
+  const section = (title, desc, items, opts = {}) => {
+    const rows = items
+      .map((it) => {
+        const g = eventIndex.get(it.id);
+        if (!g) return null;
+        return { g, deal: deals.get(it.id) || it };
+      })
+      .filter(Boolean);
+    if (!rows.length) return '';
+    if (opts.sortByGem) rows.sort((a, b) => (b.g.gem ?? 0) - (a.g.gem ?? 0));
+    return `<div class="section-bar"><h3>${title}</h3><span class="hint">${desc}</span></div>
+      <div class="grid">${rows.slice(0, opts.limit || 24).map((r) => eventCard(r.g, r.deal)).join('')}</div>`;
+  };
+
+  const built = ev.built ? new Date(ev.built) : null;
+  $('#eventsHint').textContent = `数据来自 Steam 商店接口${built ? ` · 更新于 ${built.getMonth() + 1}-${String(built.getDate()).padStart(2, '0')} ${String(built.getHours()).padStart(2, '0')}:${String(built.getMinutes()).padStart(2, '0')}` : ''} · 每天自动刷新`;
+
+  box.innerHTML = [
+    section('💸 打折中的隐藏佳作', '按冷门指数排序 —— 便宜、好评、还没人发现', ev.sections.specials || [], { sortByGem: true, limit: 24 }),
+    section('🆕 刚上架', '最近发售的新作，先替你看看口碑', ev.sections.newReleases || [], { limit: 24 }),
+    section('🧪 即将发售', '上架前先加进观察名单，Demo 见下方筛选', ev.sections.comingSoon || [], { limit: 18 }),
+    section('🔥 当前热销', '大盘在买什么，对照着看更清楚', ev.sections.topSellers || [], { limit: 18 }),
+  ]
+    .filter(Boolean)
+    .join('') || `<div class="empty-state"><span class="big">🕳️</span>现场数据里没有与语料重合的游戏</div>`;
+}
+
+function bindEvents() {
+  $('#eventsBody')?.addEventListener('click', (ev) => {
+    const card = ev.target.closest('[data-eid]');
+    if (!card) return;
+    const g = eventIndex.get(Number(card.dataset.eid));
+    if (g) openInfo(g);
+  });
+}
+
 // ---------------- 启动 ----------------
 function boot() {
   loadStatus();
@@ -955,6 +1049,7 @@ function boot() {
 
   $$('.tab').forEach((t) => t.addEventListener('click', () => switchView(t.dataset.view)));
   bindTip();
+  bindEvents();
 
   // 只绑定模式分段控件，别把「卡片尺寸」那组按钮一起卷进来
   $$('#modeSeg .seg-btn').forEach((b) =>
