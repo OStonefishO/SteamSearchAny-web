@@ -2383,6 +2383,113 @@ async function paintFriendDot() {
   if (dot) { dot.classList.add('hidden'); dot.textContent = ''; }
 }
 
+/* 好友「管理」弹窗：备注 / 星标置顶 / 删除好友 / 拉黑 */
+function openFriendMenu(btn, refresh) {
+  const m = document.getElementById('modal');
+  const box = document.getElementById('modalContent');
+  if (!m || !btn) return;
+  const me = currentEmail();
+  if (!me) return openLogin();
+  const fid = btn.dataset.manage;
+  const email = btn.dataset.em || '';
+  const name = btn.dataset.nm || email.split('@')[0];
+  const remark0 = btn.dataset.rm || '';
+  let starred = btn.dataset.star === '1';
+
+  m.hidden = false;
+  box.innerHTML = '<div class="m-body"><h3>管理好友</h3>' +
+    '<div class="profile-head">' + avatarHtml({ avatar: '🎮' }, 44) +
+      '<div><div class="profile-name">' + esc(remark0 || name) + '</div>' +
+      '<div class="profile-mail">' + esc(email) + '</div></div></div>' +
+    '<label class="field-label" for="fRemark">备注（只有你自己看得到）</label>' +
+    '<input class="input" id="fRemark" maxlength="16" value="' + esc(remark0) + '" placeholder="给 TA 起个备注">' +
+    '<div class="share-menu" style="margin-top:14px">' +
+      '<button class="share-opt" id="fStar"><b id="fStarTx">' + (starred ? '★ 已置顶' : '☆ 星标置顶') + '</b><span>置顶的好友排在最前面</span></button>' +
+      '<button class="share-opt" id="fDel"><b>删除好友</b><span>只是解除好友关系，之后还能重新加</span></button>' +
+      '<button class="share-opt danger" id="fBlock"><b>拉黑</b><span>删除好友 + 进黑名单，你看不到 TA 的留言，TA 也留不了言</span></button>' +
+    '</div>' +
+    '<p class="form-msg" id="fMsg"></p>' +
+    '<div class="share-actions">' +
+      '<button class="btn btn-primary" id="fSave">保存备注</button>' +
+      '<button class="btn" id="fCancel">取消</button>' +
+    '</div></div>';
+
+  const msg = box.querySelector('#fMsg');
+  const say = (t, kind) => {
+    if (!msg) return;
+    msg.className = 'form-msg ' + (kind || '');
+    msg.textContent = t;
+  };
+  box.querySelector('#fCancel').onclick = () => (m.hidden = true);
+
+  box.querySelector('#fSave').onclick = async () => {
+    const v = (box.querySelector('#fRemark').value || '').trim().slice(0, 16);
+    try {
+      await rest('/rest/v1/' + FR + '?id=eq.' + Number(fid), {
+        method: 'PATCH',
+        headers: { Prefer: 'return=minimal' },
+        body: { remark: v },
+      });
+      toast('备注已保存');
+      m.hidden = true;
+      if (typeof refresh === 'function') refresh();
+    } catch (e) {
+      say('保存失败：' + e.message, 'form-err');
+    }
+  };
+
+  const starBtn = box.querySelector('#fStar');
+  starBtn.onclick = async () => {
+    const next = !starred;
+    starBtn.disabled = true;
+    try {
+      await rest('/rest/v1/' + FR + '?id=eq.' + Number(fid), {
+        method: 'PATCH',
+        headers: { Prefer: 'return=minimal' },
+        body: { starred: next },
+      });
+      starred = next;
+      box.querySelector('#fStarTx').textContent = starred ? '★ 已置顶' : '☆ 星标置顶';
+      starBtn.dataset.star = starred ? '1' : '';
+      toast(starred ? '已置顶' : '已取消置顶');
+      if (typeof refresh === 'function') refresh();
+    } catch (e) {
+      say('置顶失败：' + e.message, 'form-err');
+    } finally {
+      starBtn.disabled = false;
+    }
+  };
+
+  const dropFriend = async () => {
+    await rest('/rest/v1/' + FR + '?id=eq.' + Number(fid), { method: 'DELETE' });
+  };
+
+  box.querySelector('#fDel').onclick = async () => {
+    if (!confirm('删除好友「' + (remark0 || name) + '」？之后还能重新加。')) return;
+    try {
+      await dropFriend();
+      toast('已删除好友');
+      m.hidden = true;
+      if (typeof refresh === 'function') refresh();
+    } catch (e) {
+      say('删除失败：' + e.message, 'form-err');
+    }
+  };
+
+  box.querySelector('#fBlock').onclick = async () => {
+    if (!confirm('拉黑「' + (remark0 || name) + '」？会同时删除好友关系，对方在你主页的留言也会隐藏。')) return;
+    try {
+      await blockUser(email);
+      await dropFriend().catch(() => {});
+      toast('已拉黑');
+      m.hidden = true;
+      if (typeof refresh === 'function') refresh();
+    } catch (e) {
+      say('拉黑失败：' + e.message, 'form-err');
+    }
+  };
+}
+
 export async function openFriends() {
   const m = document.getElementById('modal');
   const box = document.getElementById('modalContent');
