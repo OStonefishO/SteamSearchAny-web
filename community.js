@@ -576,17 +576,17 @@ const REACT = [
 
 function reactionHtml(postId, counts, mine, big) {
   const cls = big ? 'react-lg' : '';
-  const btn = (r) => {
+  const btn = (r, extra) => {
     const n = counts[r.k] || 0;
     const on = mine.has(r.k) ? 'on' : '';
-    return '<button class="react ' + cls + ' ' + on + '" data-react="' + r.k + '" title="' + r.t + '">' +
+    const ex = extra ? ' react-extra-item' : '';
+    return '<button class="react ' + cls + ex + ' ' + on + '" data-react="' + r.k + '" title="' + r.t + '">' +
       '<span class="emo">' + r.e + '</span>' + (n ? '<b>' + n + '</b>' : '') + '</button>';
   };
-  const main = REACT.slice(0, 2).map(btn).join('');
-  const rest = REACT.slice(2).map(btn).join('');
+  const main = REACT.slice(0, 2).map((r) => btn(r, false)).join('');
+  const rest = REACT.slice(2).map((r) => btn(r, true)).join('');
   return '<div class="react-row" data-pid="' + postId + '">' +
-    main +
-    '<div class="react-extra hidden">' + rest + '</div>' +
+    main + rest +
     '<button class="react-plus ' + cls + '" data-more="1" title="更多心情">＋</button>' +
     '</div>';
 }
@@ -628,11 +628,8 @@ function bindReactions(scope, root) {
     btn.onclick = (ev) => {
       ev.stopPropagation();
       const row = btn.closest('.react-row');
-      const extra = row.querySelector('.react-extra');
-      const opened = !extra.classList.contains('hidden');
-      scope.querySelectorAll('.react-extra').forEach((el) => el.classList.add('hidden'));
-      if (!opened) extra.classList.remove('hidden');
-      btn.textContent = opened ? '＋' : '－';
+      const open = row.classList.toggle('expanded');
+      btn.textContent = open ? '－' : '＋';
     };
   });
   if (!scope.__reactOutsideBound) {

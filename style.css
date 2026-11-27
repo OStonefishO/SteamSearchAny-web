@@ -865,10 +865,10 @@ textarea.input { resize: vertical; min-height: 96px; }
 /* 互动条 */
 .react-row {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-  margin: 12px 0 2px;
+  margin: 12px 0 2px; flex: 1 1 auto; min-width: 0;
 }
-.react-extra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.react-extra.hidden { display: none; }
+.react-extra-item { display: none; }
+.react-row.expanded .react-extra-item { display: inline-flex; }
 
 .react {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -897,6 +897,11 @@ textarea.input { resize: vertical; min-height: 96px; }
 .react-lg .emo { font-size: 27px; }
 .react-lg b { font-size: 14px; }
 
+/* 卡片底部：互动条与提示同行，提示靠右不挤压 */
+.post-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+.open-hint { margin-left: auto; font-size: 13.5px; color: var(--text-3); font-weight: 600; white-space: nowrap; }
+.post-clickable:hover .open-hint { color: var(--accent); }
+
 .float-emoji {
   position: fixed; transform: translate(-50%, 0); pointer-events: none;
   font-size: 26px; z-index: 9999;
@@ -907,7 +912,3 @@ textarea.input { resize: vertical; min-height: 96px; }
   60% { opacity: 1; transform: translate(-50%, -42px) scale(1.2); }
   100% { opacity: 0; transform: translate(-50%, -78px) scale(1); }
 }
-
-/* 查看详情提示放大 */
-.open-hint { margin-left: auto; font-size: 13.5px; color: var(--text-3); font-weight: 600; }
-.post-clickable:hover .open-hint { color: var(--accent); }
