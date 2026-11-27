@@ -85,12 +85,22 @@ async function tryRefreshToken() {
 
 async function rest(path, opts = {}, retried = false) {
   const cfg = window.LIGHTHOUSE_SUPABASE || {};
-  const s = session();
+  const method = opts.method || 'GET';
+  const isWrite = method !== 'GET';
+  let s = session();
+
+  // 写操作前：有 email 却没 token（比如同步过来的会话只存了邮箱），先换一次 token，
+  // 否则请求会带着 publishable key 发出去 = 以 anon 身份写 → RLS 400/42501，看起来像"策略坏了"
+  if (isWrite && s && s.email && !s.access_token) {
+    if (await tryRefreshToken()) s = session();
+  }
+
+  const authed = !!s?.access_token;
   const res = await fetch(cfg.url + path, {
-    method: opts.method || 'GET',
+    method,
     headers: {
       apikey: cfg.anonKey,
-      Authorization: `Bearer ${s?.access_token || cfg.anonKey}`,
+      Authorization: `Bearer ${authed ? s.access_token : cfg.anonKey}`,
       'Content-Type': 'application/json',
       ...(opts.headers || {}),
     },
@@ -104,7 +114,14 @@ async function rest(path, opts = {}, retried = false) {
     localStorage.removeItem(AUTH_KEY);
     throw new Error('登录已过期，请重新登录');
   }
-  if (!res.ok) throw new Error((data && data.message) || 'HTTP ' + res.status);
+  if (!res.ok) {
+    const msg = (data && data.message) || 'HTTP ' + res.status;
+    // RLS 拒绝时补一句"这次请求是什么身份"，一眼就能分清是策略问题还是掉登录
+    if (/row-level security|42501|permission denied/i.test(msg)) {
+      throw new Error(msg + '（这次请求身份：' + (authed ? '已登录 ' + (s?.email || '') : '匿名 —— 需要重新登录') + '）');
+    }
+    throw new Error(msg);
+  }
   return data;
 }
 
