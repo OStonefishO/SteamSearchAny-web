@@ -1510,6 +1510,7 @@ export async function openFriends() {
         return '<div class="fr-row">' + av(other) +
           '<div class="fr-info"><b>' + esc(nm(other)) + '<span class="post-uid">#' + esc(uidOf(other) || '----') + '</span></b>' +
           '<span class="fr-sub">' + esc((profMap[other] && profMap[other].bio) || '这个人懒得写简介') + '</span></div>' +
+          '<button class="btn btn-sm btn-primary" data-chat="' + esc(other) + '" data-cname="' + esc(nm(other)) + '">聊天</button>' +
           '<button class="btn btn-sm" data-view="' + esc(other) + '">主页</button>' +
           '<button class="btn btn-sm" data-unfriend="' + x.id + '">解除</button></div>';
       }).join('')
@@ -1564,6 +1565,9 @@ export async function openFriends() {
       } catch (e) { toast('失败'); }
     };
   });
+  body.querySelectorAll('[data-chat]').forEach((b) => {
+    b.onclick = () => openChat(b.dataset.chat, b.dataset.cname);
+  });
   body.querySelectorAll('[data-view]').forEach((b) => {
     b.onclick = async () => {
       const em = b.dataset.view;
@@ -1584,3 +1588,108 @@ try {
   };
   if (!bindF()) setTimeout(bindF, 700);
 } catch (e) {}
+
+
+/* ================= 好友私聊 ================= */
+const CHAT_EMOJI = ['😀', '😂', '🥹', '😍', '🤔', '😎', '😭', '😡', '👍', '👎', '🎮', '🔥', '💡', '🎉', '❤️', '🌙'];
+
+export function openChat(peerEmail, peerName) {
+  const m = document.getElementById('modal');
+  const box = document.getElementById('modalContent');
+  const me = currentEmail();
+  if (!m) return;
+  if (!me) return openLogin();
+  if (peerEmail === me) return;
+  m.hidden = false;
+
+  box.innerHTML = '<div class="m-body chat-body">' +
+    '<div class="chat-head"><b>' + esc(peerName || peerEmail) + '</b><span class="chat-sub">私聊</span>' +
+    '<button class="btn btn-sm" id="chatClose" style="margin-left:auto">关闭</button></div>' +
+    '<div class="chat-list" id="chatList"><div class="empty-state"><span class="spin"></span></div></div>' +
+    '<div class="chat-images" id="chatImgs"></div>' +
+    '<div class="chat-compose">' +
+      '<button class="btn btn-sm" id="chatEmoji" title="表情">😊</button>' +
+      '<button class="btn btn-sm" id="chatPic" title="图片">🖼</button>' +
+      '<input type="file" id="chatFile" accept="image/*" multiple class="hidden">' +
+      '<input class="input sm" id="chatInput" placeholder="说点什么…" style="flex:1">' +
+      '<button class="btn btn-sm btn-primary" id="chatSend">发送</button>' +
+    '</div>' +
+    '<div class="chat-emoji hidden" id="chatEmojiBox">' +
+      CHAT_EMOJI.map((e) => '<button data-em="' + e + '">' + e + '</button>').join('') +
+    '</div>' +
+    '</div>';
+
+  const list = box.querySelector('#chatList');
+  const imgsWrap = box.querySelector('#chatImgs');
+  let pending = [];
+  let timer = null;
+  let closed = false;
+  let lastCount = -1;
+
+  const renderImgs = () => {
+    imgsWrap.innerHTML = pending.map((src, i) => '<span class="thumb"><img src="' + src + '"><b data-rm="' + i + '">×</b></span>').join('');
+    imgsWrap.querySelectorAll('[data-rm]').forEach((b) => {
+      b.onclick = () => { pending.splice(Number(b.dataset.rm), 1); renderImgs(); };
+    });
+  };
+
+  const load = async () => {
+    try {
+      const rows = await rest('/rest/v1/messages?select=id,sender,receiver,body,images,created_at&or=(and(sender.eq.' + encodeURIComponent(me) + ',receiver.eq.' + encodeURIComponent(peerEmail) + '),and(sender.eq.' + encodeURIComponent(peerEmail) + ',receiver.eq.' + encodeURIComponent(me) + '))&order=created_at.asc&limit=200') || [];
+      if (rows.length === lastCount) return;
+      lastCount = rows.length;
+      list.innerHTML = rows.map((r) => {
+        const mine = r.sender === me;
+        const imgs = Array.isArray(r.images) ? r.images : [];
+        return '<div class="chat-msg ' + (mine ? 'mine' : '') + '">' +
+          (r.body ? '<div class="bubble">' + linkifyMentions(r.body) + '</div>' : '') +
+          (imgs.length ? '<div class="chat-pic">' + imgs.map((src) => '<img src="' + src + '">').join('') + '</div>' : '') +
+          '<div class="chat-time">' + timeAgo(r.created_at) + '</div></div>';
+      }).join('') || '<div class="empty-state">还没有消息，打个招呼吧</div>';
+      list.scrollTop = list.scrollHeight;
+    } catch (e) {
+      list.innerHTML = '<div class="empty-state">读取失败：' + esc(e.message) + '<br><span style="font-size:12px;color:var(--text-4)">多半是 messages 表还没建</span></div>';
+    }
+  };
+
+  const send = async () => {
+    const input = box.querySelector('#chatInput');
+    const body = input.value.trim();
+    if (!body && !pending.length) return;
+    try {
+      await rest('/rest/v1/messages', { method: 'POST', body: [{ sender: me, receiver: peerEmail, body: body || '', images: pending.slice() }] });
+      input.value = '';
+      pending = [];
+      renderImgs();
+      lastCount = -1;
+      load();
+    } catch (e) {
+      toast('发送失败：' + e.message);
+    }
+  };
+
+  box.querySelector('#chatSend').onclick = send;
+  box.querySelector('#chatInput').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
+  box.querySelector('#chatEmoji').onclick = () => box.querySelector('#chatEmojiBox').classList.toggle('hidden');
+  box.querySelector('#chatEmojiBox').onclick = (e) => {
+    const b = e.target.closest('[data-em]');
+    if (!b) return;
+    const input = box.querySelector('#chatInput');
+    input.value += b.dataset.em;
+    input.focus();
+  };
+  box.querySelector('#chatPic').onclick = () => box.querySelector('#chatFile').click();
+  box.querySelector('#chatFile').onchange = async (e) => {
+    const files = [...(e.target.files || [])].slice(0, 3 - pending.length);
+    for (const f of files) {
+      try { pending.push(await compressImage(f, 900, 0.72)); } catch (err) {}
+    }
+    renderImgs();
+    e.target.value = '';
+  };
+  const close = () => { closed = true; if (timer) clearInterval(timer); m.hidden = true; };
+  box.querySelector('#chatClose').onclick = close;
+
+  load();
+  timer = setInterval(() => { if (!closed) load(); }, 4000);
+}
