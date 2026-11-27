@@ -902,7 +902,7 @@ async function renderDetail(root) {
       return '<div class="cmt" data-cid="' + cm.id + '"' + (canDelC ? ' data-mine="1"' : '') + '>' +
         '<b class="cmt-author" data-name="' + esc(cm.author_name) + '" data-uid="' + (cm.author_id || uidByEmail[cm.author_email] || '') + '">' + esc(cm.author_name) +
         (cm.author_id || uidByEmail[cm.author_email] ? '<span class="post-uid">#' + (cm.author_id || uidByEmail[cm.author_email]) + '</span>' : '') + '</b> ' +
-        esc(cm.body) +
+        linkifyMentions(cm.body) +
         '<span class="cmt-time">' + timeAgo(cm.created_at) + '</span>' +
         '</div>';
     }).join('') || '<div class="cmt" style="color:var(--text-4)">还没有评论</div>';
@@ -1153,7 +1153,8 @@ function openCmtMenu(ev, name, root, inputEl, uid) {
   document.querySelectorAll('.cmt-menu').forEach((n) => n.remove());
   const menu = document.createElement('div');
   menu.className = 'cmt-menu';
-  menu.innerHTML = '<button data-act="home">他的主页</button><button data-act="reply">回复评论</button>';
+  const isSelf = currentEmail() && profile().name === name;
+  menu.innerHTML = '<button data-act="home">' + (isSelf ? '我的主页' : '他的主页') + '</button><button data-act="reply">回复评论</button>';
   document.body.appendChild(menu);
 
   const x = Math.min(ev.clientX, window.innerWidth - 160);
@@ -1297,21 +1298,26 @@ async function notifyComment(post, body) {
   const me = currentEmail();
   if (!me) return;
   const rows = [];
-  const target = post.author_email;
-  if (target && target !== me) {
-    rows.push({ user_email: target, kind: 'comment', post_id: post.id, post_title: post.title || '无标题', from_name: profile().name, body });
-  }
-  const m = body.match(/^@(\S+)\s/);
-  if (m && m[1]) {
-    const replyTo = m[1];
+  const seen = new Set([me]);
+  const push = (email, kind, text) => {
+    if (!email || seen.has(email)) return;
+    seen.add(email);
+    rows.push({ user_email: email, kind, post_id: post.id, post_title: post.title || '无标题', from_name: profile().name, body: text });
+  };
+
+  // 帖子作者收到「评论」
+  if (post.author_email && post.author_email !== me) push(post.author_email, 'comment', body);
+
+  // 正文里所有 @某人 都通知（不限开头）
+  const names = Array.from(new Set((body.match(/@([A-Za-z0-9_\u4e00-\u9fa5\-]{1,16})/g) || []).map((x) => x.slice(1))));
+  for (const nm of names) {
     try {
-      const ps = await rest('/rest/v1/profiles?select=user_email,name&name=eq.' + encodeURIComponent(replyTo) + '&limit=1');
+      const ps = await rest('/rest/v1/profiles?select=user_email&name=eq.' + encodeURIComponent(nm) + '&limit=1');
       const em = ps && ps[0] && ps[0].user_email;
-      if (em && em !== me && em !== target) {
-        rows.push({ user_email: em, kind: 'reply', post_id: post.id, post_title: post.title || '无标题', from_name: profile().name, body });
-      }
+      push(em, 'reply', body);
     } catch (e) {}
   }
+
   if (!rows.length) return;
   try {
     await rest('/rest/v1/notifications', { method: 'POST', body: rows });
@@ -1336,3 +1342,10 @@ try {
   setTimeout(() => { refreshNotifs().catch(() => {}); }, 1200);
   setTimeout(() => { syncProfile().then(() => refreshAuthButton()).catch(() => {}); }, 600);
 } catch (e) {}
+
+
+/** 把 @某人 渲染成高亮的 span（先转义，避免注入） */
+function linkifyMentions(text) {
+  const safe = esc(text);
+  return safe.replace(/@([A-Za-z0-9_\u4e00-\u9fa5\-]{1,16})/g, '<span class="mention">@$1</span>');
+}
