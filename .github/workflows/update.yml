@@ -27,6 +27,9 @@ jobs:
       - name: 增量同步新游戏
         run: node tools/sync.mjs --limit=4000 --tags=40 --pages=3
 
+      - name: 补系统需求与截图（每轮一批）
+        run: node tools/fetch-extra.mjs --limit=500
+
       - name: 提交并推送
         run: |
           git config user.name "lighthouse-bot"

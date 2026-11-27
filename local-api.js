@@ -75,6 +75,7 @@
           dev: extra?.[0] || null,
           pub: extra?.[1] || null,
           req: extra?.[2] || null,
+          shots: Array.isArray(extra?.[3]) ? extra[3] : null,
           tags, // [[tagId, weight], ...]
           rev: total ? { total, pct, label: labels[labelIdx] || null } : null,
           year: year || null,

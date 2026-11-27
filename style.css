@@ -462,6 +462,24 @@ select:focus, input[type='text']:focus { border-color: var(--accent-dim); box-sh
 }
 .info-empty { font-size: 12px; color: var(--text-4); border: 1px dashed var(--line-2); border-radius: 9px; padding: 12px; }
 
+/* 宣传图翻页 */
+.shot-count { font-size: 11px; color: var(--accent); letter-spacing: 0; text-transform: none; margin-left: 6px; }
+.shots { position: relative; border-radius: 10px; overflow: hidden; background: #0a1219; border: 1px solid var(--line); }
+.shots img { width: 100%; display: block; aspect-ratio: 16 / 9; object-fit: cover; }
+.shot-nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 34px; height: 52px; display: grid; place-items: center;
+  background: rgba(5, 10, 16, 0.66); color: #eaf6ff; font-size: 22px; line-height: 1;
+  border: 1px solid rgba(255, 255, 255, 0.14); backdrop-filter: blur(3px);
+  transition: background 0.16s ease;
+}
+.shot-nav:hover { background: rgba(69, 189, 247, 0.85); color: #05161f; }
+.shot-nav.prev { left: 0; border-radius: 0 8px 8px 0; }
+.shot-nav.next { right: 0; border-radius: 8px 0 0 8px; }
+.shot-dots { display: flex; gap: 5px; justify-content: center; margin-top: 8px; }
+.shot-dots .dot { width: 7px; height: 7px; border-radius: 50%; background: #24384a; transition: all 0.16s ease; }
+.shot-dots .dot.on { background: var(--accent); width: 18px; border-radius: 4px; }
+
 .seg-sm .seg-btn { padding: 5px 10px; font-size: 11.5px; }
 .vis-ctl { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .vis-label { font-size: 11.5px; color: var(--text-4); letter-spacing: 0.06em; }

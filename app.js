@@ -679,6 +679,7 @@ async function openInfo(g) {
   const rev = full.rev ?? { total: 0, pct: 0, label: null };
   const tags = full.tags ?? [];
   const yt = `https://www.youtube.com/results?search_query=${encodeURIComponent(`${full.alt || full.name} gameplay`)}`;
+  const shots = Array.isArray(full.shots) ? full.shots.filter(Boolean) : [];
 
   const reqHtml = full.req
     ? `<div class="info-req">${esc(full.req).replace(/\n/g, '<br>')}</div>`
@@ -721,6 +722,22 @@ async function openInfo(g) {
         ${reqHtml}
       </div>
 
+      ${
+        shots.length
+          ? `<div class="info-block">
+        <h4>宣传图 <span class="shot-count" id="shotCount">1 / ${shots.length}</span></h4>
+        <div class="shots">
+          <button class="shot-nav prev" id="shotPrev" aria-label="上一张">‹</button>
+          <img id="shotImg" src="${shots[0]}" alt="${esc(full.name)} 宣传图" loading="lazy">
+          <button class="shot-nav next" id="shotNext" aria-label="下一张">›</button>
+        </div>
+        <div class="shot-dots" id="shotDots">
+          ${shots.map((_, i) => `<button class="dot${i === 0 ? ' on' : ''}" data-dot="${i}" aria-label="第 ${i + 1} 张"></button>`).join('')}
+        </div>
+      </div>`
+          : ''
+      }
+
       <div class="hero-actions" style="margin-top:20px">
         <a class="btn btn-primary" href="${STORE(full.id)}" target="_blank" rel="noreferrer">Steam 商店 ↗</a>
         <a class="btn" href="${yt}" target="_blank" rel="noreferrer">YouTube ↗</a>
@@ -736,6 +753,25 @@ async function openInfo(g) {
     runSimilar();
   });
   $('#infoDetail', content)?.addEventListener('click', () => openDetail(full));
+
+  // 宣传图翻页
+  if (shots.length) {
+    let idx = 0;
+    const img = $('#shotImg', content);
+    const counter = $('#shotCount', content);
+    const go = (n) => {
+      idx = (n + shots.length) % shots.length;
+      if (img) img.src = shots[idx];
+      if (counter) counter.textContent = `${idx + 1} / ${shots.length}`;
+      $$('.dot', content).forEach((d, i) => d.classList.toggle('on', i === idx));
+    };
+    $('#shotPrev', content)?.addEventListener('click', () => go(idx - 1));
+    $('#shotNext', content)?.addEventListener('click', () => go(idx + 1));
+    $('#shotDots', content)?.addEventListener('click', (ev) => {
+      const d = ev.target.closest('[data-dot]');
+      if (d) go(Number(d.dataset.dot));
+    });
+  }
 }
 
 // ---------------- 视图 ----------------
