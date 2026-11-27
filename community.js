@@ -113,6 +113,19 @@ export async function syncProfile() {
   }
 }
 
+/* ---------- 把自己的历史帖子统一成最新资料 ---------- */
+async function refreshOwnPosts(p) {
+  const email = currentEmail();
+  if (!email) return;
+  try {
+    await rest('/rest/v1/posts?author_email=eq.' + encodeURIComponent(email), {
+      method: 'PATCH',
+      headers: { Prefer: 'return=minimal' },
+      body: { author_name: p.name, author_avatar: p.img || p.avatar, author_id: p.id },
+    });
+  } catch {}
+}
+
 /* ---------- 头像上传（居中裁剪 + 缩放） ---------- */
 function openAvatarEditor(file, onDone) {
   const m = document.getElementById('modal');
@@ -250,7 +263,7 @@ export function openLogin() {
   box.querySelector('#uploadBtn').onclick = () => box.querySelector('#fileIn').click();
   box.querySelector('#fileIn').onchange = (e) => {
     const f = e.target.files && e.target.files[0];
-    if (f) openAvatarEditor(f, (dataUrl) => { DRAFT = { ...(DRAFT || profile()), img: dataUrl }; saveProfile(DRAFT); refreshAuthButton(); toast('头像已保存'); });
+    if (f) openAvatarEditor(f, (dataUrl) => { DRAFT = { ...(DRAFT || profile()), img: dataUrl }; saveProfile(DRAFT); refreshAuthButton(); refreshOwnPosts(DRAFT).catch(() => {}); toast('头像已保存'); });
   };
   box.querySelector('#clearImg').onclick = () => { draft.img = ''; preview(); };
   box.querySelector('#pAvatars').onclick = (e) => {
@@ -272,6 +285,7 @@ export function openLogin() {
     draft.name = (box.querySelector('#pName').value || '').trim().slice(0, 16) || email.split('@')[0];
     saveProfile(draft);
     apiUpsertProfile(draft).catch(() => {});
+    refreshOwnPosts(draft).catch(() => {});
     DRAFT = null;
     m.hidden = true;
     refreshAuthButton();
