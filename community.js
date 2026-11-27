@@ -839,17 +839,36 @@ async function renderDetail(root) {
     const cs = await rest('/rest/v1/comments?select=id,body,author_name,author_email,created_at&post_id=eq.' + x.id + '&order=created_at.asc') || [];
     cmtList.innerHTML = cs.map((cm) => {
       const canDelC = currentEmail() && cm.author_email === currentEmail();
-      return '<div class="cmt"><b>' + esc(cm.author_name) + '</b> ' + esc(cm.body) +
+      return '<div class="cmt" data-cid="' + cm.id + '"' + (canDelC ? ' data-mine="1"' : '') + '>' +
+        '<b class="cmt-author" data-name="' + esc(cm.author_name) + '">' + esc(cm.author_name) + '</b> ' +
+        esc(cm.body) +
         '<span class="cmt-time">' + timeAgo(cm.created_at) + '</span>' +
-        (canDelC ? '<button class="cmt-del" data-delc="' + cm.id + '">删除</button>' : '') + '</div>';
+        '</div>';
     }).join('') || '<div class="cmt" style="color:var(--text-4)">还没有评论</div>';
-    cmtList.querySelectorAll('[data-delc]').forEach((b) => {
-      b.onclick = async () => {
-        if (!confirm('删除这条评论？')) return;
-        try { await rest('/rest/v1/comments?id=eq.' + b.dataset.delc, { method: 'DELETE' }); renderDetail(root); }
-        catch (e) { toast('删除失败：' + e.message); }
+    cmtList.querySelectorAll('.cmt-author').forEach((el) => {
+      el.onclick = (ev) => {
+        ev.stopPropagation();
+        openCmtMenu(ev, el.dataset.name, root, cmtList.querySelector('#cmtInput'));
       };
     });
+
+    const delCmt = async (cid) => {
+      if (!confirm('删除这条评论？')) return;
+      try { await rest('/rest/v1/comments?id=eq.' + cid, { method: 'DELETE' }); renderDetail(root); }
+      catch (e) { toast('删除失败：' + e.message); }
+    };
+    cmtList.querySelectorAll('.cmt[data-mine]').forEach((el) => {
+      const cid = el.dataset.cid;
+      el.oncontextmenu = (ev) => { ev.preventDefault(); ev.stopPropagation(); delCmt(cid); };
+      let timer = null;
+      const start = () => { timer = setTimeout(() => { delCmt(cid); }, 650); };
+      const cancel = () => { if (timer) clearTimeout(timer); };
+      el.addEventListener('touchstart', start, { passive: true });
+      el.addEventListener('touchend', cancel);
+      el.addEventListener('touchmove', cancel);
+      el.addEventListener('touchcancel', cancel);
+    });
+    if (!cmtList.querySelector('#replyHint') && false) {}
     root.querySelector('#cmtSend').onclick = async () => {
       if (!currentEmail()) return openLogin();
       const v = root.querySelector('#cmtInput').value.trim();
@@ -1065,3 +1084,38 @@ try {
     setTimeout(() => { try { openResetPassword(); } catch (e) {} }, 900);
   }
 } catch (e) {}
+
+
+/* ================= 评论作者菜单 ================= */
+function openCmtMenu(ev, name, root, inputEl) {
+  document.querySelectorAll('.cmt-menu').forEach((n) => n.remove());
+  const menu = document.createElement('div');
+  menu.className = 'cmt-menu';
+  menu.innerHTML = '<button data-act="home">他的主页</button><button data-act="reply">回复评论</button>';
+  document.body.appendChild(menu);
+
+  const x = Math.min(ev.clientX, window.innerWidth - 160);
+  const y = Math.min(ev.clientY, window.innerHeight - 100);
+  menu.style.left = Math.max(8, x) + 'px';
+  menu.style.top = Math.max(8, y) + 'px';
+
+  const close = () => menu.remove();
+  setTimeout(() => document.addEventListener('click', close, { once: true }), 0);
+
+  menu.onclick = (e) => {
+    const act = e.target.closest('[data-act]');
+    if (!act) return;
+    if (act.dataset.act === 'home') {
+      openAuthor(name, null);
+    } else {
+      const input = document.querySelector('#cmtInput');
+      if (input) {
+        const prefix = '@' + name + ' ';
+        if (!input.value.startsWith(prefix)) input.value = prefix + input.value;
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
+    }
+    close();
+  };
+}

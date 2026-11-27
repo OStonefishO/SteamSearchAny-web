@@ -867,7 +867,7 @@ textarea.input { resize: vertical; min-height: 96px; }
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
   margin: 12px 0 2px; flex: 1 1 auto; min-width: 0;
 }
-.react-extra-item { display: none; }
+.react-row .react-extra-item { display: none; }
 .react-row.expanded .react-extra-item { display: inline-flex; }
 
 .react {
@@ -912,3 +912,19 @@ textarea.input { resize: vertical; min-height: 96px; }
   60% { opacity: 1; transform: translate(-50%, -42px) scale(1.2); }
   100% { opacity: 0; transform: translate(-50%, -78px) scale(1); }
 }
+
+
+/* 评论作者菜单 */
+.cmt-menu {
+  position: fixed; z-index: 9998; min-width: 132px; padding: 6px;
+  background: #0c141d; border: 1px solid var(--line-2); border-radius: 12px;
+  box-shadow: 0 20px 44px -20px #000; display: flex; flex-direction: column; gap: 2px;
+}
+.cmt-menu button {
+  text-align: left; padding: 8px 12px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--text-2); font-size: 13px; cursor: pointer;
+}
+.cmt-menu button:hover { background: #13202c; color: var(--text); }
+.cmt-author { cursor: pointer; }
+.cmt-author:hover { color: var(--accent); }
+.cmt[data-mine] { position: relative; }
