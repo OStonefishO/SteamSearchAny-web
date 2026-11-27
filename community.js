@@ -904,9 +904,14 @@ async function renderDetail(root) {
 
   const cmtList = root.querySelector('#cmtList');
   try {
-    const cs = await rest('/rest/v1/comments?select=id,body,author_name,author_id,author_email,created_at&post_id=eq.' + x.id + '&order=created_at.asc') || [];
+    const cs = await rest('/rest/v1/comments?select=id,body,author_name,author_email,created_at&post_id=eq.' + x.id + '&order=created_at.asc') || [];
 
     // 补 UID：老评论没有 author_id 时，按邮箱从 profiles 里查
+    try {
+      const all = await rest('/rest/v1/profiles?select=name&limit=500');
+      window.__lhNames = new Set((all || []).map((p) => p.name).filter(Boolean));
+    } catch (e) { window.__lhNames = new Set(); }
+
     const emailSet = Array.from(new Set((cs || []).map((c) => c.author_email).filter(Boolean)));
     const uidByEmail = {};
     if (emailSet.length) {
@@ -953,7 +958,11 @@ async function renderDetail(root) {
       const v = root.querySelector('#cmtInput').value.trim();
       if (!v) return;
       try {
-        await rest('/rest/v1/comments', { method: 'POST', body: [{ post_id: x.id, body: v, author_name: profile().name, author_id: profile().id, author_email: currentEmail() }] });
+        try {
+          await rest('/rest/v1/comments', { method: 'POST', body: [{ post_id: x.id, body: v, author_name: profile().name, author_id: profile().id, author_email: currentEmail() }] });
+        } catch (err1) {
+          await rest('/rest/v1/comments', { method: 'POST', body: [{ post_id: x.id, body: v, author_name: profile().name, author_email: currentEmail() }] });
+        }
         notifyComment(x, v).catch(() => {});
         renderDetail(root);
       } catch (e) { toast('评论失败'); }
@@ -1172,7 +1181,9 @@ function openCmtMenu(ev, name, root, inputEl, uid) {
   const menu = document.createElement('div');
   menu.className = 'cmt-menu';
   const isSelf = currentEmail() && profile().name === name;
-  menu.innerHTML = '<button data-act="home">' + (isSelf ? '我的主页' : '他的主页') + '</button><button data-act="reply">回复评论</button>';
+  menu.innerHTML = '<button data-act="home">' + (isSelf ? '我的主页' : '他的主页') + '</button>' +
+    '<button data-act="reply">回复评论</button>' +
+    (isSelf ? '' : '<button data-act="friend">加为好友</button>');
   document.body.appendChild(menu);
 
   const x = Math.min(ev.clientX, window.innerWidth - 160);
@@ -1188,6 +1199,8 @@ function openCmtMenu(ev, name, root, inputEl, uid) {
     if (!act) return;
     if (act.dataset.act === 'home') {
       openAuthor(name, uid || null);
+    } else if (act.dataset.act === 'friend') {
+      addFriendByName(name).catch(() => toast('加好友失败'));
     } else {
       const input = document.querySelector('#cmtInput');
       if (input) {
@@ -1365,5 +1378,31 @@ try {
 /** 把 @某人 渲染成高亮的 span（先转义，避免注入） */
 function linkifyMentions(text) {
   const safe = esc(text);
-  return safe.replace(/@([A-Za-z0-9_\u4e00-\u9fa5\-]{1,16})/g, '<span class="mention">@$1</span>');
+  const known = window.__lhNames || null;
+  return safe.replace(/@([A-Za-z0-9_\u4e00-\u9fa5\-]{1,16})/g, (all, nm) => {
+    if (known && known.size && !known.has(nm)) return all;
+    return '<span class="mention">@' + nm + '</span>';
+  });
+}
+
+
+/** 按昵称找邮箱并互加好友 */
+export async function addFriendByName(name) {
+  const me = currentEmail();
+  if (!me) return openLogin();
+  if (profile().name === name) return toast('不能加自己');
+  try {
+    const ps = await rest('/rest/v1/profiles?select=user_email,name&name=eq.' + encodeURIComponent(name) + '&limit=1');
+    const target = ps && ps[0] && ps[0].user_email;
+    if (!target) return toast('找不到这个用户');
+    if (target === me) return toast('不能加自己');
+    await rest('/rest/v1/friends', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
+      body: [{ a_email: me, b_email: target }, { a_email: target, b_email: me }],
+    });
+    toast('已加 ' + name + ' 为好友');
+  } catch (e) {
+    toast('加好友失败：' + e.message);
+  }
 }
